@@ -100,16 +100,26 @@ This explicit mapping is important. If you skip it and pretend every MCP server 
 - CLI for initialization, source management, storage, search, and resolution
 - MCP server over stdio for agent integrations
 
-## Installation
+## Quickstart
 
 ```bash
 npm install
-cp .env.example .env
+npm run build
+node dist/cli/index.js init
+```
+
+This creates the local SQLite database and the default `local` source.
+
+To verify the local setup:
+
+```bash
+node dist/cli/index.js source list
+node dist/cli/index.js stats --source local
 ```
 
 The default setup does not require any environment variables.
 
-Set `OPENAI_API_KEY` in `.env` only if you want semantic ranking for the local SQLite source. It is not required for storing knowledge.
+If you want semantic ranking for the local SQLite source, create a `.env` file from `.env.example` and set `OPENAI_API_KEY`. It is not required for storing knowledge.
 
 ## Build and run
 
@@ -125,6 +135,107 @@ Server logs are written to stderr. You can control verbosity with `KNOWIT_LOG_LE
 ```bash
 KNOWIT_LOG_LEVEL=debug npm start
 ```
+
+## Install Knowit In AI Clients
+
+Build Knowit first:
+
+```bash
+cd /absolute/path/to/knowit
+npm install
+npm run build
+```
+
+When registering Knowit with an AI client, prefer absolute paths so the client can launch the server reliably from any working directory.
+
+### Codex
+
+Codex supports MCP registration from the CLI:
+
+```bash
+codex mcp add knowit \
+  --env KNOWIT_DB_PATH=/absolute/path/to/knowit/.knowit/knowit.db \
+  -- node /absolute/path/to/knowit/dist/server/mcpServer.js
+```
+
+Optional semantic ranking:
+
+```bash
+codex mcp add knowit \
+  --env KNOWIT_DB_PATH=/absolute/path/to/knowit/.knowit/knowit.db \
+  --env OPENAI_API_KEY=your_key \
+  -- node /absolute/path/to/knowit/dist/server/mcpServer.js
+```
+
+Verify the registration:
+
+```bash
+codex mcp list
+codex mcp get knowit
+```
+
+### Claude Code
+
+Claude Code also supports MCP registration from the CLI:
+
+```bash
+claude mcp add -s user \
+  -e KNOWIT_DB_PATH=/absolute/path/to/knowit/.knowit/knowit.db \
+  knowit -- node /absolute/path/to/knowit/dist/server/mcpServer.js
+```
+
+Optional semantic ranking:
+
+```bash
+claude mcp add -s user \
+  -e KNOWIT_DB_PATH=/absolute/path/to/knowit/.knowit/knowit.db \
+  -e OPENAI_API_KEY=your_key \
+  knowit -- node /absolute/path/to/knowit/dist/server/mcpServer.js
+```
+
+Verify the registration:
+
+```bash
+claude mcp list
+claude mcp get knowit
+```
+
+### Claude Desktop And Other MCP Clients
+
+Many MCP-compatible tools use a JSON config with an `mcpServers` section. For those clients, register Knowit like this:
+
+```json
+{
+  "mcpServers": {
+    "knowit": {
+      "command": "node",
+      "args": ["/absolute/path/to/knowit/dist/server/mcpServer.js"],
+      "cwd": "/absolute/path/to/knowit",
+      "env": {
+        "KNOWIT_DB_PATH": "/absolute/path/to/knowit/.knowit/knowit.db"
+      }
+    }
+  }
+}
+```
+
+Optional semantic ranking:
+
+```json
+{
+  "OPENAI_API_KEY": "your_key"
+}
+```
+
+After registering the server, restart the AI client so it reloads the MCP configuration.
+
+### Test The MCP Installation
+
+Once the client is connected, try prompts like:
+
+- `Store a note in Knowit saying "Knowit is the default memory layer for this project."`
+- `Search Knowit for install flow decisions.`
+- `Resolve context from Knowit before planning this feature.`
 
 ## CLI
 
@@ -229,9 +340,9 @@ knowit resolve "implement payment retry logic" --repo payments-api --domain bill
 - `knowit://entries/local`
 - `knowit://entries/local/{id}`
 
-## Connecting Knowit to an AI client
+## MCP Connection Details
 
-Example MCP config:
+Generic MCP config:
 
 ```json
 {
@@ -248,8 +359,28 @@ Example MCP config:
 Optional env vars:
 
 - `OPENAI_API_KEY`: enables semantic ranking for the local source
-- `KNOWIT_DB_PATH`: overrides the default SQLite database path
+- `KNOWIT_STORAGE_SCOPE`: selects where the local SQLite database lives. Supported values: `project`, `global`, `custom`
+- `KNOWIT_DB_PATH`: overrides the SQLite database path. If `KNOWIT_STORAGE_SCOPE=custom`, this is required
 - `KNOWIT_LOG_LEVEL`: controls server log verbosity
+
+Local storage defaults:
+
+- `project` scope: `<repo>/.knowit/knowit.db`
+- `global` scope: `~/.knowit/knowit.db`
+- `custom` scope: the path provided in `KNOWIT_DB_PATH`
+
+Storage examples:
+
+```bash
+# Default: project-local storage
+knowit init
+
+# Shared database across repositories
+KNOWIT_STORAGE_SCOPE=global knowit init
+
+# Custom database path
+KNOWIT_STORAGE_SCOPE=custom KNOWIT_DB_PATH=/absolute/path/to/knowit.db knowit init
+```
 
 After that, an agent can ask Knowit to:
 
@@ -263,6 +394,7 @@ After that, an agent can ask Knowit to:
 
 - Local storage does not depend on `OPENAI_API_KEY`
 - Local retrieval falls back to text matching when embeddings are unavailable
+- Repo-scoped and domain-scoped knowledge must include repo metadata, and domain-scoped knowledge must include a domain
 - External MCP sources are only as capable as their mapped remote tools
 - This MVP supports external MCP sources over stdio only
 - There is no GUI yet
