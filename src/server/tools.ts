@@ -5,6 +5,7 @@ import {
   knowledgeScopeSchema,
   knowledgeTypeSchema,
   resolveContextInputSchema,
+  resolveSourceActionInputSchema,
   storeKnowledgeInputSchema,
 } from "../types/knowledge.js";
 import { knownSourceProviderSchema } from "../types/source.js";
@@ -59,6 +60,17 @@ const resolveContextSchema = {
   domain: z.string().optional(),
   files: z.array(z.string()).default([]),
   limit: z.number().int().min(1).max(10).default(5),
+};
+
+const resolveSourceActionSchema = {
+  action: z.enum(["read", "write"]),
+  artifactType: z.enum(["knowledge", "prd", "plan", "doc", "decision", "note"]).default("knowledge"),
+  source: z.string().optional(),
+  query: z.string().optional(),
+  task: z.string().optional(),
+  title: z.string().optional(),
+  repo: z.string().optional(),
+  domain: z.string().optional(),
 };
 
 const captureSessionLearningsSchema = {
@@ -236,6 +248,17 @@ export const registerTools = (server: McpServer, memoryService: MemoryService): 
         files: parsedInput.files,
         results,
       });
+    }),
+  );
+
+  server.tool(
+    "resolve_source_action",
+    "Determine whether Knowit should handle a read/write directly or route the agent to an external provider MCP next. Use this when the user mentions Knowit but not the downstream provider.",
+    resolveSourceActionSchema,
+    withToolLogging("resolve_source_action", async (input) => {
+      const parsedInput = resolveSourceActionInputSchema.parse(input);
+      const result = await memoryService.resolveSourceAction(parsedInput);
+      return asTextContent(result);
     }),
   );
 

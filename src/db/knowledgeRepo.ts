@@ -152,6 +152,19 @@ export class KnowledgeRepository {
 
   createEntry(input: KnowledgeEntryInput): KnowledgeEntry {
     const parsedInput = knowledgeEntryInputSchema.parse(input);
+
+    const existing = this.findEntryByIdentity(
+      parsedInput.title,
+      parsedInput.type,
+      parsedInput.scope,
+      parsedInput.repo ?? null,
+      parsedInput.domain ?? null,
+    );
+
+    if (existing) {
+      return this.updateEntryById(existing.id, parsedInput);
+    }
+
     const now = new Date().toISOString();
     const entry: KnowledgeEntry = knowledgeEntrySchema.parse({
       id: randomUUID(),
@@ -199,6 +212,61 @@ export class KnowledgeRepository {
       });
 
     return entry;
+  }
+
+  private findEntryByIdentity(
+    title: string,
+    type: string,
+    scope: string,
+    repo: string | null,
+    domain: string | null,
+  ): KnowledgeEntry | null {
+    const row = this.db
+      .prepare(
+        `
+        SELECT * FROM knowledge_entries
+        WHERE lower(title) = lower(?)
+          AND type = ?
+          AND scope = ?
+          AND COALESCE(repo, '') = COALESCE(?, '')
+          AND COALESCE(domain, '') = COALESCE(?, '')
+        LIMIT 1
+      `,
+      )
+      .get(title, type, scope, repo, domain) as KnowledgeRow | undefined;
+
+    return row ? mapRowToEntry(row) : null;
+  }
+
+  private updateEntryById(id: string, input: KnowledgeEntryInput): KnowledgeEntry {
+    const now = new Date().toISOString();
+
+    this.db
+      .prepare(
+        `
+        UPDATE knowledge_entries
+        SET content = @content,
+            tags = @tags,
+            embedding = @embedding,
+            confidence = @confidence,
+            url = @url,
+            metadata = @metadata,
+            updated_at = @updatedAt
+        WHERE id = @id
+      `,
+      )
+      .run({
+        id,
+        content: input.content,
+        tags: serializeTags(input.tags),
+        embedding: input.embedding ? JSON.stringify(input.embedding) : null,
+        confidence: input.confidence,
+        url: input.url ?? null,
+        metadata: JSON.stringify(input.metadata),
+        updatedAt: now,
+      });
+
+    return this.getEntryById(id)!;
   }
 
   getEntryById(id: string): KnowledgeEntry | null {

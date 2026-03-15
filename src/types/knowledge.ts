@@ -129,6 +129,34 @@ export const knowledgeResultSchema = knowledgeEntrySchema.extend({
   score: z.number().min(0).max(1),
 });
 
+export const resolveSourceActionInputSchema = z.object({
+  action: z.enum(["read", "write"]),
+  artifactType: z.enum(["knowledge", "prd", "plan", "doc", "decision", "note"]).default("knowledge"),
+  source: z.string().trim().min(1).optional(),
+  query: z.string().min(1).optional(),
+  task: z.string().min(1).optional(),
+  title: z.string().min(1).optional(),
+  repo: z.string().trim().min(1).optional(),
+  domain: z.string().trim().min(1).optional(),
+});
+
+export const sourceActionResultSchema = z.object({
+  mode: z.enum(["local", "route"]),
+  action: z.enum(["read", "write"]),
+  artifactType: z.enum(["knowledge", "prd", "plan", "doc", "decision", "note"]),
+  sourceId: z.string().min(1),
+  sourceName: z.string().min(1),
+  sourceKind: sourceKindSchema,
+  shouldUseKnowitDirectly: z.boolean(),
+  mcpServerName: z.string().nullable(),
+  provider: z.string().nullable(),
+  nextStep: z.string().min(1),
+  readHint: z.string().nullable(),
+  writeHint: z.string().nullable(),
+  storeDistilledMemory: z.boolean(),
+  relevantKnowledge: z.array(knowledgeResultSchema).default([]),
+});
+
 export type KnowledgeType = z.infer<typeof knowledgeTypeSchema>;
 export type KnowledgeScope = z.infer<typeof knowledgeScopeSchema>;
 export type KnowledgeEntry = z.infer<typeof knowledgeEntrySchema>;
@@ -136,5 +164,7 @@ export type KnowledgeEntryInput = z.infer<typeof knowledgeEntryInputSchema>;
 export type KnowledgeListFilters = z.infer<typeof knowledgeListFiltersSchema>;
 export type KnowledgeSearchFilters = z.infer<typeof knowledgeSearchFiltersSchema>;
 export type ResolveContextInput = z.infer<typeof resolveContextInputSchema>;
+export type ResolveSourceActionInput = z.infer<typeof resolveSourceActionInputSchema>;
 export type StoreKnowledgeInput = z.infer<typeof storeKnowledgeInputSchema>;
 export type KnowledgeResult = z.infer<typeof knowledgeResultSchema>;
+export type SourceActionResult = z.infer<typeof sourceActionResultSchema>;

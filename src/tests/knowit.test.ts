@@ -4,11 +4,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { getDatabasePath, getStorageScope } from "../db/database.js";
-import { initializeDatabase } from "../db/database.js";
+import { getDatabasePath, getStorageScope, initializeDatabase, resetDatabase } from "../db/database.js";
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
 import { SqliteMemorySource } from "../sources/sqliteSource.js";
+import { MemoryService } from "../services/memoryService.js";
 import { storeKnowledgeInputSchema } from "../types/knowledge.js";
 import type { KnowledgeSource } from "../types/source.js";
 
@@ -369,4 +369,94 @@ test("repo and domain scoped knowledge requires routing metadata", () => {
       }),
     /domain is required when scope is domain/,
   );
+});
+
+test("resolveSourceAction returns direct local guidance for local source", async () => {
+  const { cleanup } = createTestDatabase();
+  const originalPath = process.env.KNOWIT_DB_PATH;
+
+  try {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-action-local-"));
+    process.env.KNOWIT_DB_PATH = path.join(tempDir, "knowit.db");
+    resetDatabase();
+    const service = new MemoryService();
+    service.init();
+
+    await service.storeKnowledge({
+      source: "local",
+      type: "decision",
+      title: "Auth decision",
+      content: "Use stateless JWT auth for API clients.",
+      scope: "repo",
+      repo: "api-gateway",
+      domain: "auth",
+      tags: ["auth"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    const result = await service.resolveSourceAction({
+      action: "read",
+      artifactType: "decision",
+      source: "local",
+      query: "auth decision",
+      repo: "api-gateway",
+      domain: "auth",
+    });
+
+    assert.equal(result.mode, "local");
+    assert.equal(result.shouldUseKnowitDirectly, true);
+    assert.equal(result.sourceId, "local");
+    assert.equal(result.relevantKnowledge.length, 1);
+  } finally {
+    resetDatabase();
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+    cleanup();
+  }
+});
+
+test("resolveSourceAction returns routed guidance for notion source", async () => {
+  const { cleanup } = createTestDatabase();
+  const originalPath = process.env.KNOWIT_DB_PATH;
+
+  try {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-action-route-"));
+    process.env.KNOWIT_DB_PATH = path.join(tempDir, "knowit.db");
+    resetDatabase();
+    const service = new MemoryService();
+    service.init();
+    service.connectKnownSource({
+      provider: "notion",
+      mcpServerName: "notion",
+      isDefault: false,
+    });
+
+    const result = await service.resolveSourceAction({
+      action: "write",
+      artifactType: "prd",
+      source: "notion",
+      title: "Feature PRD",
+      repo: "knowit",
+      domain: "product",
+    });
+
+    assert.equal(result.mode, "route");
+    assert.equal(result.shouldUseKnowitDirectly, false);
+    assert.equal(result.mcpServerName, "notion");
+    assert.equal(result.provider, "notion");
+    assert.equal(result.storeDistilledMemory, true);
+    assert.match(result.nextStep, /notion MCP/i);
+  } finally {
+    resetDatabase();
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+    cleanup();
+  }
 });

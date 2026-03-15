@@ -153,3 +153,10 @@ export const initializeDatabase = (
   applyCompatibilityMigrations(db);
   return db;
 };
+
+export const resetDatabase = (): void => {
+  if (databaseInstance) {
+    databaseInstance.close();
+    databaseInstance = null;
+  }
+};

@@ -4,11 +4,15 @@ import {
   knowledgeListFiltersSchema,
   knowledgeSearchFiltersSchema,
   resolveContextInputSchema,
+  resolveSourceActionInputSchema,
+  sourceActionResultSchema,
   storeKnowledgeInputSchema,
   type KnowledgeEntry,
   type KnowledgeListFilters,
   type KnowledgeResult,
   type ResolveContextInput,
+  type ResolveSourceActionInput,
+  type SourceActionResult,
   type StoreKnowledgeInput,
 } from "../types/knowledge.js";
 import type {
@@ -168,6 +172,78 @@ export class MemoryService {
         updatedAt: entry.updatedAt,
       })),
     };
+  }
+
+  async resolveSourceAction(input: ResolveSourceActionInput): Promise<SourceActionResult> {
+    this.init();
+    const parsedInput = resolveSourceActionInputSchema.parse(input);
+    const source = this.getSelectedSource(parsedInput.source);
+    const lookupText =
+      parsedInput.query ?? parsedInput.task ?? parsedInput.title ?? parsedInput.artifactType;
+
+    const relevantKnowledge =
+      source.kind === "route"
+        ? await this.searchKnowledge({
+            query: lookupText,
+            repo: parsedInput.repo,
+            domain: parsedInput.domain,
+            limit: 5,
+          })
+        : await this.searchKnowledge({
+            query: lookupText,
+            source: source.id,
+            repo: parsedInput.repo,
+            domain: parsedInput.domain,
+            limit: 5,
+          });
+
+    if (source.kind === "route") {
+      const routeConfig = source.config.mode === "route" ? source.config : null;
+      if (!routeConfig) {
+        throw new Error(`Source ${source.id} is routed but does not have route configuration.`);
+      }
+      const nextStep =
+        parsedInput.action === "write"
+          ? `Use the ${routeConfig.mcpServerName} MCP next to write the canonical ${parsedInput.artifactType}.`
+          : `Use the ${routeConfig.mcpServerName} MCP next to read the canonical ${parsedInput.artifactType}.`;
+
+      return sourceActionResultSchema.parse({
+        mode: "route",
+        action: parsedInput.action,
+        artifactType: parsedInput.artifactType,
+        sourceId: source.id,
+        sourceName: source.name,
+        sourceKind: source.kind,
+        shouldUseKnowitDirectly: false,
+        mcpServerName: routeConfig.mcpServerName,
+        provider: routeConfig.provider,
+        nextStep,
+        readHint: routeConfig.readHint,
+        writeHint: routeConfig.writeHint,
+        storeDistilledMemory: true,
+        relevantKnowledge,
+      });
+    }
+
+    return sourceActionResultSchema.parse({
+      mode: "local",
+      action: parsedInput.action,
+      artifactType: parsedInput.artifactType,
+      sourceId: source.id,
+      sourceName: source.name,
+      sourceKind: source.kind,
+      shouldUseKnowitDirectly: true,
+      mcpServerName: null,
+      provider: null,
+      nextStep:
+        parsedInput.action === "write"
+          ? `Store the ${parsedInput.artifactType} directly in Knowit.`
+          : `Read the ${parsedInput.artifactType} directly from Knowit.`,
+      readHint: "Use Knowit search or context resolution directly.",
+      writeHint: "Use Knowit store_knowledge directly.",
+      storeDistilledMemory: false,
+      relevantKnowledge,
+    });
   }
 
   private getSelectedProviders(sourceId?: string) {
