@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -8,7 +9,10 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const defaultDbPath = path.resolve(process.cwd(), "knowit.db");
+const projectDatabaseDirectory = ".knowit";
+const databaseFileName = "knowit.db";
+
+export type StorageScope = "project" | "global" | "custom";
 
 const schemaSql = `
 CREATE TABLE IF NOT EXISTS knowledge_entries (
@@ -84,8 +88,46 @@ const applyCompatibilityMigrations = (database: Database.Database): void => {
   }
 };
 
-export const getDatabasePath = (): string =>
-  path.resolve(process.cwd(), process.env.KNOWIT_DB_PATH ?? defaultDbPath);
+const normalizeStorageScope = (value?: string): StorageScope => {
+  if (value === "global" || value === "custom") {
+    return value;
+  }
+
+  return "project";
+};
+
+const resolveCustomDatabasePath = (cwd: string, configuredPath: string): string =>
+  path.isAbsolute(configuredPath) ? configuredPath : path.resolve(cwd, configuredPath);
+
+export const getStorageScope = (): StorageScope => {
+  if (process.env.KNOWIT_DB_PATH) {
+    return normalizeStorageScope(process.env.KNOWIT_STORAGE_SCOPE ?? "custom");
+  }
+
+  return normalizeStorageScope(process.env.KNOWIT_STORAGE_SCOPE);
+};
+
+export const getDatabasePath = (cwd: string = process.cwd()): string => {
+  const storageScope = getStorageScope();
+
+  if (storageScope === "custom") {
+    if (!process.env.KNOWIT_DB_PATH) {
+      throw new Error("KNOWIT_DB_PATH must be set when KNOWIT_STORAGE_SCOPE=custom.");
+    }
+
+    return resolveCustomDatabasePath(cwd, process.env.KNOWIT_DB_PATH);
+  }
+
+  if (process.env.KNOWIT_DB_PATH) {
+    return resolveCustomDatabasePath(cwd, process.env.KNOWIT_DB_PATH);
+  }
+
+  if (storageScope === "global") {
+    return path.join(os.homedir(), ".knowit", databaseFileName);
+  }
+
+  return path.join(cwd, projectDatabaseDirectory, databaseFileName);
+};
 
 let databaseInstance: Database.Database | null = null;
 
@@ -94,7 +136,9 @@ export const getDatabase = (): Database.Database => {
     return databaseInstance;
   }
 
-  databaseInstance = new Database(getDatabasePath());
+  const databasePath = getDatabasePath();
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  databaseInstance = new Database(databasePath);
   databaseInstance.pragma("journal_mode = WAL");
   databaseInstance.pragma("foreign_keys = ON");
 

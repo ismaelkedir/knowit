@@ -34,19 +34,37 @@ export const knowledgeEntrySchema = z.object({
   metadata: z.record(z.unknown()).default({}),
 });
 
-export const knowledgeEntryInputSchema = z.object({
-  title: z.string().min(1),
-  type: knowledgeTypeSchema,
-  content: z.string().min(1),
-  scope: knowledgeScopeSchema.default("global"),
-  repo: z.string().trim().min(1).nullable().optional(),
-  domain: z.string().trim().min(1).nullable().optional(),
-  tags: z.array(z.string()).default([]),
-  embedding: z.array(z.number()).nullable().optional(),
-  confidence: z.number().min(0).max(1).default(1),
-  url: z.string().url().nullable().optional(),
-  metadata: z.record(z.unknown()).default({}),
-});
+export const knowledgeEntryInputSchema = z
+  .object({
+    title: z.string().min(1),
+    type: knowledgeTypeSchema,
+    content: z.string().min(1),
+    scope: knowledgeScopeSchema.default("global"),
+    repo: z.string().trim().min(1).nullable().optional(),
+    domain: z.string().trim().min(1).nullable().optional(),
+    tags: z.array(z.string()).default([]),
+    embedding: z.array(z.number()).nullable().optional(),
+    confidence: z.number().min(0).max(1).default(1),
+    url: z.string().url().nullable().optional(),
+    metadata: z.record(z.unknown()).default({}),
+  })
+  .superRefine((value, context) => {
+    if ((value.scope === "repo" || value.scope === "domain") && !value.repo) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["repo"],
+        message: "repo is required when scope is repo or domain.",
+      });
+    }
+
+    if (value.scope === "domain" && !value.domain) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["domain"],
+        message: "domain is required when scope is domain.",
+      });
+    }
+  });
 
 export const knowledgeListFiltersSchema = z.object({
   type: knowledgeTypeSchema.optional(),
@@ -72,19 +90,37 @@ export const resolveContextInputSchema = z.object({
   limit: z.number().int().min(1).max(10).default(5),
 });
 
-export const storeKnowledgeInputSchema = z.object({
-  source: z.string().trim().min(1).optional(),
-  title: z.string().min(1),
-  type: knowledgeTypeSchema,
-  content: z.string().min(1),
-  scope: knowledgeScopeSchema.default("global"),
-  repo: z.string().trim().min(1).nullable().optional(),
-  domain: z.string().trim().min(1).nullable().optional(),
-  tags: z.array(z.string()).default([]),
-  confidence: z.number().min(0).max(1).default(1),
-  url: z.string().url().nullable().optional(),
-  metadata: z.record(z.unknown()).default({}),
-});
+export const storeKnowledgeInputSchema = z
+  .object({
+    source: z.string().trim().min(1).optional(),
+    title: z.string().min(1),
+    type: knowledgeTypeSchema,
+    content: z.string().min(1),
+    scope: knowledgeScopeSchema.default("global"),
+    repo: z.string().trim().min(1).nullable().optional(),
+    domain: z.string().trim().min(1).nullable().optional(),
+    tags: z.array(z.string()).default([]),
+    confidence: z.number().min(0).max(1).default(1),
+    url: z.string().url().nullable().optional(),
+    metadata: z.record(z.unknown()).default({}),
+  })
+  .superRefine((value, context) => {
+    if ((value.scope === "repo" || value.scope === "domain") && !value.repo) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["repo"],
+        message: "repo is required when scope is repo or domain.",
+      });
+    }
+
+    if (value.scope === "domain" && !value.domain) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["domain"],
+        message: "domain is required when scope is domain.",
+      });
+    }
+  });
 
 export const knowledgeResultSchema = knowledgeEntrySchema.extend({
   sourceId: z.string().min(1),

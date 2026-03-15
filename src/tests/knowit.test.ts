@@ -4,10 +4,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { getDatabasePath, getStorageScope } from "../db/database.js";
 import { initializeDatabase } from "../db/database.js";
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
 import { SqliteMemorySource } from "../sources/sqliteSource.js";
+import { storeKnowledgeInputSchema } from "../types/knowledge.js";
 import type { KnowledgeSource } from "../types/source.js";
 
 const createTestDatabase = (): {
@@ -212,4 +214,84 @@ test("local sqlite source stores and retrieves knowledge without embeddings", as
   } finally {
     cleanup();
   }
+});
+
+test("database path defaults to a project-local .knowit directory", () => {
+  const originalScope = process.env.KNOWIT_STORAGE_SCOPE;
+  const originalPath = process.env.KNOWIT_DB_PATH;
+
+  delete process.env.KNOWIT_STORAGE_SCOPE;
+  delete process.env.KNOWIT_DB_PATH;
+
+  try {
+    const projectRoot = "/tmp/knowit-project";
+    assert.equal(getStorageScope(), "project");
+    assert.equal(getDatabasePath(projectRoot), path.join(projectRoot, ".knowit", "knowit.db"));
+  } finally {
+    if (originalScope === undefined) {
+      delete process.env.KNOWIT_STORAGE_SCOPE;
+    } else {
+      process.env.KNOWIT_STORAGE_SCOPE = originalScope;
+    }
+
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+  }
+});
+
+test("database path supports global and custom storage scopes", () => {
+  const originalScope = process.env.KNOWIT_STORAGE_SCOPE;
+  const originalPath = process.env.KNOWIT_DB_PATH;
+
+  try {
+    process.env.KNOWIT_STORAGE_SCOPE = "global";
+    delete process.env.KNOWIT_DB_PATH;
+    assert.equal(getStorageScope(), "global");
+    assert.equal(getDatabasePath("/tmp/ignored"), path.join(os.homedir(), ".knowit", "knowit.db"));
+
+    process.env.KNOWIT_STORAGE_SCOPE = "custom";
+    process.env.KNOWIT_DB_PATH = "shared/knowit.db";
+    assert.equal(getStorageScope(), "custom");
+    assert.equal(getDatabasePath("/workspace/app"), "/workspace/app/shared/knowit.db");
+  } finally {
+    if (originalScope === undefined) {
+      delete process.env.KNOWIT_STORAGE_SCOPE;
+    } else {
+      process.env.KNOWIT_STORAGE_SCOPE = originalScope;
+    }
+
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+  }
+});
+
+test("repo and domain scoped knowledge requires routing metadata", () => {
+  assert.throws(
+    () =>
+      storeKnowledgeInputSchema.parse({
+        title: "Missing repo",
+        type: "note",
+        content: "This should fail.",
+        scope: "repo",
+      }),
+    /repo is required when scope is repo or domain/,
+  );
+
+  assert.throws(
+    () =>
+      storeKnowledgeInputSchema.parse({
+        title: "Missing domain",
+        type: "note",
+        content: "This should also fail.",
+        scope: "domain",
+        repo: "knowit",
+      }),
+    /domain is required when scope is domain/,
+  );
 });
