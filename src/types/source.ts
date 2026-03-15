@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const sourceKindSchema = z.enum(["sqlite", "mcp"]);
+export const sourceKindSchema = z.enum(["sqlite", "mcp", "route"]);
+export const knownSourceProviderSchema = z.enum(["local", "notion"]);
 
 export const sourceToolMapSchema = z.object({
   store: z.string().trim().min(1).optional(),
@@ -22,9 +23,19 @@ export const mcpSourceConfigSchema = z.object({
   toolMap: sourceToolMapSchema,
 });
 
+export const routeSourceConfigSchema = z.object({
+  mode: z.literal("route"),
+  provider: knownSourceProviderSchema.exclude(["local"]),
+  mcpServerName: z.string().trim().min(1),
+  setupHint: z.string().min(1),
+  readHint: z.string().min(1),
+  writeHint: z.string().min(1),
+});
+
 export const sourceConfigSchema = z.discriminatedUnion("mode", [
   sqliteSourceConfigSchema,
   mcpSourceConfigSchema,
+  routeSourceConfigSchema,
 ]);
 
 export const knowledgeSourceSchema = z.object({
@@ -47,8 +58,16 @@ export const createMcpSourceInputSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+export const connectKnownSourceInputSchema = z.object({
+  provider: knownSourceProviderSchema,
+  mcpServerName: z.string().trim().min(1).optional(),
+  isDefault: z.boolean().default(false),
+});
+
 export type SourceKind = z.infer<typeof sourceKindSchema>;
+export type KnownSourceProvider = z.infer<typeof knownSourceProviderSchema>;
 export type SourceToolMap = z.infer<typeof sourceToolMapSchema>;
 export type SourceConfig = z.infer<typeof sourceConfigSchema>;
 export type KnowledgeSource = z.infer<typeof knowledgeSourceSchema>;
 export type CreateMcpSourceInput = z.infer<typeof createMcpSourceInputSchema>;
+export type ConnectKnownSourceInput = z.infer<typeof connectKnownSourceInputSchema>;

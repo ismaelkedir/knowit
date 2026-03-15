@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { getDatabase, initializeDatabase } from "./database.js";
 import {
+  connectKnownSourceInputSchema,
   createMcpSourceInputSchema,
   knowledgeSourceSchema,
+  type ConnectKnownSourceInput,
   type CreateMcpSourceInput,
+  type KnownSourceProvider,
   type KnowledgeSource,
   type SourceConfig,
 } from "../types/source.js";
@@ -112,6 +115,28 @@ export class SourceRepository {
     return this.getSourceById(id) as KnowledgeSource;
   }
 
+  connectKnownSource(input: ConnectKnownSourceInput): KnowledgeSource {
+    const parsed = connectKnownSourceInputSchema.parse(input);
+
+    if (parsed.provider === "local") {
+      const local = this.ensureLocalSource();
+      if (parsed.isDefault) {
+        this.setDefaultSource(local.id);
+      }
+      return this.getSourceById(local.id) as KnowledgeSource;
+    }
+
+    return this.upsertRouteSource(parsed.provider, {
+      mcpServerName: parsed.mcpServerName ?? "notion",
+      setupHint:
+        "Ensure the Notion MCP server is installed in the AI client. Knowit does not install or control the Notion MCP yet.",
+      readHint:
+        "Use the Notion MCP server to search or read the canonical document after first checking Knowit for routing context.",
+      writeHint:
+        "Use the Notion MCP server to create or update the canonical artifact in Notion, then optionally store distilled memory back in Knowit.",
+    });
+  }
+
   listSources(): KnowledgeSource[] {
     const rows = this.db
       .prepare("SELECT * FROM knowledge_sources ORDER BY is_default DESC, name ASC")
@@ -140,7 +165,82 @@ export class SourceRepository {
     return row ? mapRowToSource(row) : null;
   }
 
+  setDefaultSource(id: string): void {
+    this.clearDefaultSource();
+    this.db
+      .prepare("UPDATE knowledge_sources SET is_default = 1, updated_at = @updatedAt WHERE id = @id")
+      .run({
+        id,
+        updatedAt: new Date().toISOString(),
+      });
+  }
+
   private clearDefaultSource(): void {
     this.db.prepare("UPDATE knowledge_sources SET is_default = 0 WHERE is_default = 1").run();
+  }
+
+  private upsertRouteSource(
+    provider: Exclude<KnownSourceProvider, "local">,
+    input: {
+      mcpServerName: string;
+      setupHint: string;
+      readHint: string;
+      writeHint: string;
+    },
+  ): KnowledgeSource {
+    const id = provider;
+    const now = new Date().toISOString();
+    const existing = this.getSourceById(id);
+
+    if (existing) {
+      this.db
+        .prepare(
+          `
+            UPDATE knowledge_sources
+            SET name = @name, kind = @kind, config = @config, updated_at = @updatedAt
+            WHERE id = @id
+          `,
+        )
+        .run({
+          id,
+          name: provider === "notion" ? "Notion" : provider,
+          kind: "route",
+          config: JSON.stringify({
+            mode: "route",
+            provider,
+            mcpServerName: input.mcpServerName,
+            setupHint: input.setupHint,
+            readHint: input.readHint,
+            writeHint: input.writeHint,
+          }),
+          updatedAt: now,
+        });
+    } else {
+      this.db
+        .prepare(
+          `
+            INSERT INTO knowledge_sources (id, name, kind, config, is_default, created_at, updated_at)
+            VALUES (@id, @name, @kind, @config, @isDefault, @createdAt, @updatedAt)
+          `,
+        )
+        .run({
+          id,
+          name: provider === "notion" ? "Notion" : provider,
+          kind: "route",
+          config: JSON.stringify({
+            mode: "route",
+            provider,
+            mcpServerName: input.mcpServerName,
+            setupHint: input.setupHint,
+            readHint: input.readHint,
+            writeHint: input.writeHint,
+          }),
+          isDefault: 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+    }
+
+    return this.getSourceById(id) as KnowledgeSource;
   }
 }

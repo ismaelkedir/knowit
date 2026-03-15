@@ -17,6 +17,10 @@ export class SourceRegistry {
         return new SqliteMemorySource(source, this.localRepository);
       case "mcp":
         return new McpMemorySource(source);
+      case "route":
+        throw new Error(
+          `Source ${source.id} is a routed provider. Use its provider MCP directly based on the stored guidance.`,
+        );
       default: {
         const unreachable: never = source.kind;
         throw new Error(`Unsupported source kind: ${String(unreachable)}`);

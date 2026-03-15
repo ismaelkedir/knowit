@@ -9,7 +9,9 @@ import { searchCommand } from "./commands/search.js";
 import { showCommand } from "./commands/show.js";
 import { statsCommand } from "./commands/stats.js";
 import { sourceAddMcpCommand } from "./commands/sourceAddMcp.js";
+import { sourceConnectCommand } from "./commands/sourceConnect.js";
 import { sourceListCommand } from "./commands/sourceList.js";
+import { sourceShowCommand } from "./commands/sourceShow.js";
 
 dotenv.config();
 
@@ -18,7 +20,7 @@ const program = new Command();
 program
   .name("knowit")
   .description("Persistent knowledge base for AI coding agents")
-  .version("0.1.0");
+  .version("0.2.0");
 
 program
   .command("init")
@@ -95,8 +97,22 @@ sourceProgram
   .action(sourceListCommand);
 
 sourceProgram
+  .command("show")
+  .description("Show one configured source")
+  .argument("<id>", "Source ID")
+  .action(sourceShowCommand);
+
+sourceProgram
+  .command("connect")
+  .description("Connect a known source provider")
+  .argument("<provider>", "Known provider: local or notion")
+  .option("--mcp-server-name <mcpServerName>", "Known MCP server name for the provider")
+  .option("--default", "Mark this source as the default")
+  .action(sourceConnectCommand);
+
+sourceProgram
   .command("add-mcp")
-  .description("Register an external MCP source")
+  .description("Register a custom external MCP source (advanced)")
   .argument("<name>", "Source name")
   .argument("<command>", "Command used to start the external MCP server")
   .option("--args <args>", "Comma-separated command arguments")

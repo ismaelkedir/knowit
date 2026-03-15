@@ -168,6 +168,32 @@ test("source repository ensures local source and stores MCP-backed sources", () 
   }
 });
 
+test("connecting notion creates a routed source with provider guidance", () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const sourceRepository = new SourceRepository(database);
+    sourceRepository.init();
+    sourceRepository.ensureLocalSource();
+
+    const notion = sourceRepository.connectKnownSource({
+      provider: "notion",
+      mcpServerName: "notion",
+      isDefault: false,
+    });
+
+    assert.equal(notion.kind, "route");
+    assert.equal(notion.config.mode, "route");
+    assert.equal(notion.config.provider, "notion");
+    assert.equal(notion.config.mcpServerName, "notion");
+    assert.match(notion.config.setupHint, /Notion MCP server/i);
+    assert.match(notion.config.readHint, /Notion MCP server/i);
+    assert.match(notion.config.writeHint, /Notion MCP server/i);
+  } finally {
+    cleanup();
+  }
+});
+
 test("local sqlite source stores and retrieves knowledge without embeddings", async () => {
   const { database, cleanup } = createTestDatabase();
 
@@ -268,6 +294,55 @@ test("database path supports global and custom storage scopes", () => {
     } else {
       process.env.KNOWIT_DB_PATH = originalPath;
     }
+  }
+});
+
+test("storing an entry with the same logical identity updates it instead of creating a duplicate", async () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, failingEmbeddingGenerator);
+
+    const first = await source.storeKnowledge({
+      type: "rule",
+      title: "API error handling",
+      content: "Always return 4xx for client errors and 5xx for server errors.",
+      scope: "repo",
+      repo: "api-gateway",
+      domain: null,
+      tags: ["errors", "http"],
+      confidence: 0.8,
+      metadata: {},
+      source: "local",
+    });
+
+    const second = await source.storeKnowledge({
+      type: "rule",
+      title: "API error handling",
+      content: "Return 4xx for client errors, 5xx for server errors, and always include an error code in the body.",
+      scope: "repo",
+      repo: "api-gateway",
+      domain: null,
+      tags: ["errors", "http", "json"],
+      confidence: 1,
+      metadata: {},
+      source: "local",
+    });
+
+    assert.equal(first.id, second.id, "same logical entry should keep its original id");
+    assert.equal(
+      second.content,
+      "Return 4xx for client errors, 5xx for server errors, and always include an error code in the body.",
+      "content should be updated",
+    );
+    assert.deepEqual(second.tags, ["errors", "http", "json"], "tags should be updated");
+    assert.equal(second.confidence, 1, "confidence should be updated");
+
+    const allEntries = await source.listKnowledge({ repo: "api-gateway", limit: 10 });
+    assert.equal(allEntries.length, 1, "no duplicate should be created");
+  } finally {
+    cleanup();
   }
 });
 

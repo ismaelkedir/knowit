@@ -7,6 +7,7 @@ import {
   resolveContextInputSchema,
   storeKnowledgeInputSchema,
 } from "../types/knowledge.js";
+import { knownSourceProviderSchema } from "../types/source.js";
 import { logger } from "../utils/logger.js";
 
 const registerMcpSourceSchema = {
@@ -21,6 +22,12 @@ const registerMcpSourceSchema = {
     search: z.string().optional(),
     resolve: z.string().optional(),
   }),
+};
+
+const connectSourceSchema = {
+  provider: knownSourceProviderSchema,
+  mcpServerName: z.string().optional(),
+  isDefault: z.boolean().default(false),
 };
 
 const storeKnowledgeSchema = {
@@ -52,6 +59,25 @@ const resolveContextSchema = {
   domain: z.string().optional(),
   files: z.array(z.string()).default([]),
   limit: z.number().int().min(1).max(10).default(5),
+};
+
+const captureSessionLearningsSchema = {
+  learnings: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        type: knowledgeTypeSchema,
+        content: z.string().min(1),
+        scope: knowledgeScopeSchema.default("global"),
+        repo: z.string().optional(),
+        domain: z.string().optional(),
+        tags: z.array(z.string()).default([]),
+        confidence: z.number().min(0).max(1).default(1),
+      }),
+    )
+    .min(1)
+    .max(20),
+  source: z.string().optional(),
 };
 
 const asTextContent = (value: unknown) => ({
@@ -166,6 +192,15 @@ export const registerTools = (server: McpServer, memoryService: MemoryService): 
   );
 
   server.tool(
+    "connect_source",
+    "Connect a first-class source provider such as local or notion. This is the preferred product-facing source onboarding flow.",
+    connectSourceSchema,
+    withToolLogging("connect_source", async (input) =>
+      asTextContent(memoryService.connectKnownSource(input)),
+    ),
+  );
+
+  server.tool(
     "store_knowledge",
     "Store knowledge in the selected Knowit source. This can target the local store or an external MCP-backed source.",
     storeKnowledgeSchema,
@@ -201,6 +236,24 @@ export const registerTools = (server: McpServer, memoryService: MemoryService): 
         files: parsedInput.files,
         results,
       });
+    }),
+  );
+
+  server.tool(
+    "capture_session_learnings",
+    "Batch store multiple knowledge items from this coding session. Existing entries with the same title, type, scope, repo, and domain are updated rather than duplicated. Call this at the end of a session to persist decisions, patterns, and conventions discovered during the session.",
+    captureSessionLearningsSchema,
+    withToolLogging("capture_session_learnings", async (input) => {
+      const stored = await Promise.all(
+        input.learnings.map((learning) =>
+          memoryService.storeKnowledge({
+            ...learning,
+            source: input.source,
+            metadata: {},
+          }),
+        ),
+      );
+      return asTextContent({ stored: stored.length, entries: stored.map((e) => ({ id: e.id, title: e.title })) });
     }),
   );
 };

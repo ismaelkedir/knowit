@@ -11,7 +11,11 @@ import {
   type ResolveContextInput,
   type StoreKnowledgeInput,
 } from "../types/knowledge.js";
-import type { CreateMcpSourceInput, KnowledgeSource } from "../types/source.js";
+import type {
+  ConnectKnownSourceInput,
+  CreateMcpSourceInput,
+  KnowledgeSource,
+} from "../types/source.js";
 import { SourceRegistry } from "../sources/sourceRegistry.js";
 
 export interface KnowledgeStats {
@@ -54,6 +58,11 @@ export class MemoryService {
   registerMcpSource(input: CreateMcpSourceInput): KnowledgeSource {
     this.init();
     return this.sourceRepository.createMcpSource(input);
+  }
+
+  connectKnownSource(input: ConnectKnownSourceInput): KnowledgeSource {
+    this.init();
+    return this.sourceRepository.connectKnownSource(input);
   }
 
   async storeKnowledge(input: StoreKnowledgeInput): Promise<KnowledgeEntry> {
@@ -162,9 +171,21 @@ export class MemoryService {
   }
 
   private getSelectedProviders(sourceId?: string) {
-    return sourceId
-      ? [this.sourceRegistry.createProvider(this.getSelectedSource(sourceId))]
-      : this.sourceRepository.listSources().map((source) => this.sourceRegistry.createProvider(source));
+    if (sourceId) {
+      const source = this.getSelectedSource(sourceId);
+      if (source.kind === "route") {
+        throw new Error(
+          `Source ${source.id} is a routed provider. Use its guidance and the provider MCP directly instead of calling Knowit storage/search on it.`,
+        );
+      }
+
+      return [this.sourceRegistry.createProvider(source)];
+    }
+
+    return this.sourceRepository
+      .listSources()
+      .filter((source) => source.kind !== "route")
+      .map((source) => this.sourceRegistry.createProvider(source));
   }
 
   private getSelectedSource(sourceId?: string): KnowledgeSource {
