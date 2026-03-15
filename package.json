@@ -1,29 +1,51 @@
 {
   "name": "knowit",
   "version": "0.2.0",
-  "description": "Persistent knowledge base for AI coding agents with CLI and MCP access",
+  "description": "Shared team memory for AI coding agents — MCP server and CLI for persistent, queryable knowledge across sessions and teammates",
   "type": "module",
   "main": "dist/server/mcpServer.js",
   "bin": {
     "knowit": "dist/cli/index.js"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/server/mcpServer.js",
     "cli": "node dist/cli/index.js",
-    "test": "npm run build && node --test dist/tests/**/*.test.js"
+    "test": "npm run build && node --test dist/tests/**/*.test.js",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "memory",
     "knowledge-base",
+    "team-memory",
     "sqlite",
-    "cli",
-    "ai-agents"
+    "cli"
   ],
   "license": "MIT",
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ismaelkedir/knowit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ismaelkedir/knowit/issues"
+  },
+  "homepage": "https://github.com/ismaelkedir/knowit#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.4",
     "better-sqlite3": "^11.10.0",
