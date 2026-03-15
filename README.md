@@ -2,7 +2,7 @@
 
 Shared team memory for AI coding agents.
 
-Knowit gives Claude Code, Codex, and any MCP-compatible agent a persistent, queryable knowledge base for your project. It works for solo developers and teams. For teams it solves the problem no other memory tool does: every developer and every agent on the same repo reads from the same knowledge base.
+Knowit gives Claude Code, Codex, and other MCP-compatible agents a persistent, queryable memory layer for your project. Use it to store rules, architecture notes, decisions, patterns, and task context outside the repo instead of scattering `AGENTS.md`, `ARCHITECTURE.md`, and ad hoc notes across projects.
 
 ## The problem
 
@@ -28,7 +28,7 @@ Most memory tools for AI agents are single-user, single-store local databases wi
 - **Deduplication** — storing an entry with the same title, type, scope, and routing metadata updates the existing entry rather than creating a duplicate
 - **Graceful degradation** — semantic search via OpenAI embeddings is optional; text and tag matching works without any API key
 
-## Architecture
+## How it works
 
 ```text
 Developer A's Claude Code      Developer B's Codex
@@ -44,12 +44,23 @@ local SQLite source          external MCP source
 (shared team database)       (Notion, Obsidian, etc.)
 ```
 
+## Install
+
+```bash
+npm install -g knowit
+```
+
+Or run it without installing:
+
+```bash
+npx knowit --help
+```
+
 ## Quickstart
 
 ### Solo developer
 
 ```bash
-npm install -g knowit
 knowit init
 ```
 
@@ -92,8 +103,6 @@ claude mcp add -s user \
 ```
 
 From this point, any knowledge stored by one developer's agent is immediately searchable by every other agent.
-
-> **Note:** Until Knowit is published to npm, replace `knowit serve` with `node /absolute/path/to/knowit/dist/server/mcpServer.js` and omit the `-g` install step. See [Build from source](#build-from-source).
 
 ## Prompting agents to use Knowit
 
@@ -181,6 +190,12 @@ knowit source add-mcp "notion-memory" "node" \
   --store-tool store_page \
   --search-tool search_pages \
   --resolve-tool resolve_notes
+```
+
+Start the MCP server directly:
+
+```bash
+knowit serve
 ```
 
 ## Knowledge model
@@ -275,49 +290,6 @@ Storage defaults:
 | `knowit://sources` | List of configured sources |
 | `knowit://entries/local` | All entries in the local source |
 | `knowit://entries/local/{id}` | A single entry by ID |
-
-## Build from source
-
-```bash
-git clone https://github.com/YOUR_USERNAME/knowit
-cd knowit
-npm install
-npm run build
-node dist/cli/index.js init
-```
-
-When registering with an AI client before global install, use absolute paths:
-
-```bash
-claude mcp add -s user \
-  -e KNOWIT_DB_PATH=/absolute/path/to/knowit/.knowit/knowit.db \
-  knowit -- node /absolute/path/to/knowit/dist/server/mcpServer.js
-```
-
-## Publishing to npm
-
-Replace `YOUR_USERNAME` in `package.json` with your npm username or org, then:
-
-```bash
-# One-time: log in to npm
-npm login
-
-# Verify what will be published (should only include dist/, README.md, LICENSE)
-npm pack --dry-run
-
-# Publish
-npm publish
-```
-
-The `prepublishOnly` script runs `npm run build && npm test` automatically before every publish, so the published package always contains a fresh, passing build.
-
-To publish a scoped package (e.g. `@yourorg/knowit`), change `"name"` in `package.json` to `"@yourorg/knowit"`. The `"publishConfig": { "access": "public" }` field is already set so scoped packages publish publicly without the `--access public` flag.
-
-After publishing, users install with:
-
-```bash
-npm install -g knowit
-```
 
 ## Limitations
 

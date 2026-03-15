@@ -12,6 +12,7 @@ import { sourceAddMcpCommand } from "./commands/sourceAddMcp.js";
 import { sourceConnectCommand } from "./commands/sourceConnect.js";
 import { sourceListCommand } from "./commands/sourceList.js";
 import { sourceShowCommand } from "./commands/sourceShow.js";
+import { startMcpServer } from "../server/mcpServer.js";
 
 dotenv.config();
 
@@ -19,8 +20,15 @@ const program = new Command();
 
 program
   .name("knowit")
-  .description("Persistent knowledge base for AI coding agents")
-  .version("0.2.0");
+  .description("Shared team memory for AI coding agents")
+  .version("0.2.1");
+
+program
+  .command("serve")
+  .description("Start the Knowit MCP server over stdio")
+  .action(async () => {
+    await startMcpServer();
+  });
 
 program
   .command("init")

@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import dotenv from "dotenv";
+import { pathToFileURL } from "node:url";
 import { MemoryService } from "../services/memoryService.js";
 import { registerResources } from "./resources.js";
 import { registerTools } from "./tools.js";
@@ -14,7 +15,7 @@ export const createMcpServer = (): McpServer => {
 
   const server = new McpServer({
     name: "knowit",
-    version: "0.2.0",
+    version: "0.2.1",
   });
 
   registerTools(server, memoryService);
@@ -23,15 +24,19 @@ export const createMcpServer = (): McpServer => {
   return server;
 };
 
-const start = async (): Promise<void> => {
+export const startMcpServer = async (): Promise<void> => {
   const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   logger.info("Knowit MCP server started over stdio.");
 };
 
-start().catch((error: unknown) => {
-  const message = error instanceof Error ? error.stack ?? error.message : "Unknown MCP server error";
-  logger.error(message);
-  process.exit(1);
-});
+const isDirectExecution = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+
+if (isDirectExecution) {
+  startMcpServer().catch((error: unknown) => {
+    const message = error instanceof Error ? error.stack ?? error.message : "Unknown MCP server error";
+    logger.error(message);
+    process.exit(1);
+  });
+}

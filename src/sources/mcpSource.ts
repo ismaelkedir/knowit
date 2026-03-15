@@ -108,7 +108,7 @@ export class McpMemorySource implements MemorySourceProvider {
       }
 
       const client = new Client(
-        { name: "knowit-source-client", version: "0.2.0" },
+        { name: "knowit-source-client", version: "0.2.1" },
         { capabilities: {} },
       );
 
