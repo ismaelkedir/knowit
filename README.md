@@ -1,300 +1,202 @@
 # Knowit
 
-Shared team memory for AI coding agents.
+**Persistent memory for AI coding agents — shared across your whole team.**
 
-Knowit gives Claude Code, Codex, and other MCP-compatible agents a persistent, queryable memory layer for your project. Use it to store rules, architecture notes, decisions, patterns, and task context outside the repo instead of scattering `AGENTS.md`, `ARCHITECTURE.md`, and ad hoc notes across projects.
+[![npm](https://img.shields.io/npm/v/knowit)](https://www.npmjs.com/package/knowit)
+[![license](https://img.shields.io/github/license/ismaelkedir/knowit)](LICENSE)
 
-## The problem
+---
 
-AI coding agents are stateless by default. Every session, every developer's agent, starts from zero. You re-explain the same conventions, the agent violates the same rules, and context established in one session never reaches the next.
+Your AI agent has no memory. Every session starts from zero — re-explaining the same conventions, violating the same rules, forgetting the decisions you made last week.
 
-**Without Knowit:**
-- Agent asks you how Stripe webhooks should be handled. You explain. Next session, same question.
-- A new teammate's agent introduces a naming pattern you deprecated six months ago because it never knew the decision was made.
-- Three agents working on the same codebase hold three inconsistent models of the architecture.
-
-**With Knowit:**
-- Agent calls `resolve_context` before planning. It finds the idempotency rule, the deprecated pattern warning, and the current architecture decision. It starts informed.
-- A convention stored by any agent or developer is immediately searchable by every other agent on the team.
-- At session end, the agent calls `capture_session_learnings` and persists everything it discovered.
-
-## What makes Knowit different
-
-Most memory tools for AI agents are single-user, single-store local databases with an MCP wrapper. Knowit is designed differently:
-
-- **Team-scoped memory** — a shared database makes knowledge available across all developers and agents on a repo
-- **Source orchestration** — Knowit is both an MCP server (for agents) and an MCP client (to external knowledge systems like Notion or Obsidian). External MCP servers do not share a universal tool contract; Knowit solves this with explicit source registration and tool mapping
-- **Structured knowledge model** — types (`rule`, `architecture`, `pattern`, `decision`, `convention`, `note`), scopes (`global`, `team`, `repo`, `domain`), confidence scores, and tags — not flat markdown files
-- **Deduplication** — storing an entry with the same title, type, scope, and routing metadata updates the existing entry rather than creating a duplicate
-- **Graceful degradation** — semantic search via OpenAI embeddings is optional; text and tag matching works without any API key
-
-## How it works
-
-```text
-Developer A's Claude Code      Developer B's Codex
-        |                               |
-        | MCP                           | MCP
-        v                               v
-           Knowit MCP server
-                  |
-    +-------------+------------------+
-    |                                |
-    v                                v
-local SQLite source          external MCP source
-(shared team database)       (Notion, Obsidian, etc.)
-```
-
-## Install
+Knowit fixes that. It's an MCP server that gives Claude Code, Codex, and any MCP-compatible agent a persistent, queryable knowledge base for your project. Store architecture decisions, coding rules, patterns, and context once. Every agent session — and every developer on your team — starts informed.
 
 ```bash
 npm install -g knowit
 ```
 
-Or run it without installing:
+---
 
-```bash
-npx knowit --help
-```
+## How it works
+
+Agents interact with Knowit through MCP tools. Before planning a task, an agent calls `resolve_context` and gets back the relevant rules, decisions, and patterns for that work. After a session, it calls `capture_session_learnings` to persist what it discovered. Knowledge accumulates. Nothing is forgotten.
+
+For teams, every developer points their agent at the same database. One developer's agent stores a convention — every other agent on the repo can find it immediately.
+
+---
 
 ## Quickstart
 
-### Solo developer
+### 1. Install and initialize
 
 ```bash
+npm install -g knowit
 knowit init
 ```
 
-Register with Claude Code:
+### 2. Register with your AI client
 
+**Claude Code:**
 ```bash
 claude mcp add -s user \
   -e KNOWIT_DB_PATH="$HOME/.knowit/knowit.db" \
   knowit -- knowit serve
 ```
 
-Register with Codex:
-
+**Codex:**
 ```bash
 codex mcp add knowit \
   --env KNOWIT_DB_PATH="$HOME/.knowit/knowit.db" \
   -- knowit serve
 ```
 
-### Team shared memory
+### 3. Tell your agent to use it
 
-Pick a shared path accessible to all developers on the team (NFS mount, shared volume, or a path convention in your dev environment):
-
-```bash
-KNOWIT_DB_PATH=/shared/team/knowit.db knowit init
-```
-
-Each developer registers their AI client against the same database:
-
-```bash
-# Developer A
-claude mcp add -s user \
-  -e KNOWIT_DB_PATH=/shared/team/knowit.db \
-  knowit -- knowit serve
-
-# Developer B — same command, same path
-claude mcp add -s user \
-  -e KNOWIT_DB_PATH=/shared/team/knowit.db \
-  knowit -- knowit serve
-```
-
-From this point, any knowledge stored by one developer's agent is immediately searchable by every other agent.
-
-## Prompting agents to use Knowit
-
-Add to your `CLAUDE.md` or `AGENTS.md`:
+Add this to your `CLAUDE.md` or `AGENTS.md`:
 
 ```markdown
 ## Memory
 
-This project uses Knowit for persistent agent memory.
+This project uses Knowit for persistent memory.
 
-- Before planning any task, call `resolve_context` with the task description and current repo.
-- After completing a task, call `capture_session_learnings` with any decisions, patterns, or conventions discovered.
-- When you encounter a rule or architecture decision, store it with `store_knowledge` before the session ends.
+- Before planning any task, call `resolve_context` with the task description and repo name.
+- After completing a task, call `capture_session_learnings` with decisions, patterns, or conventions you discovered.
 ```
+
+That's it. Your agent now has memory.
+
+---
+
+## Team shared memory
+
+The real power of Knowit is at the team level. Point every developer's agent at the same database and knowledge becomes a shared team asset — not a per-user artifact.
+
+```bash
+# Initialize a shared database (on a shared volume, or commit the path convention to your repo)
+KNOWIT_DB_PATH=/shared/team/knowit.db knowit init
+
+# Each developer registers against the same path
+claude mcp add -s user \
+  -e KNOWIT_DB_PATH=/shared/team/knowit.db \
+  knowit -- knowit serve
+```
+
+From this point, any rule, decision, or pattern stored by any developer's agent is immediately available to everyone else's.
+
+---
 
 ## MCP tools
 
-| Tool | Description |
+| Tool | What it does |
 |---|---|
 | `resolve_context` | Retrieve relevant knowledge before planning a task |
 | `store_knowledge` | Store a single knowledge entry |
-| `capture_session_learnings` | Batch store multiple discoveries from this session (deduplicates automatically) |
-| `search_knowledge` | Search knowledge across one or more sources |
-| `list_sources` | List configured knowledge sources |
-| `register_mcp_source` | Register an external MCP server as a source |
+| `capture_session_learnings` | Batch-store everything discovered this session — deduplicates automatically |
+| `search_knowledge` | Search across one or more knowledge sources |
+| `resolve_source_action` | Determine whether to use Knowit directly or route to an external source (Notion, etc.) |
+| `connect_source` | Connect a first-class provider (local, Notion) |
+| `list_sources` | List configured sources |
 
-### `capture_session_learnings`
-
-This is the primary auto-capture tool. Call it at session end with everything discovered:
-
-```json
-{
-  "learnings": [
-    {
-      "title": "Stripe webhook idempotency",
-      "type": "rule",
-      "content": "Always use the Stripe event ID as the idempotency key. Never process the same event twice.",
-      "scope": "repo",
-      "repo": "payments-api",
-      "tags": ["stripe", "webhooks", "idempotency"]
-    },
-    {
-      "title": "Payment retry state check",
-      "type": "pattern",
-      "content": "Before retrying a payment, read server state. Client-side retry counters are not authoritative.",
-      "scope": "repo",
-      "repo": "payments-api",
-      "tags": ["payments", "retry"]
-    }
-  ]
-}
-```
-
-Entries with the same title, type, scope, repo, and domain are updated rather than duplicated. Safe to call repeatedly.
+---
 
 ## CLI
 
 ```bash
-# Initialize (creates database and default source)
-knowit init
-
-# Store knowledge
+# Store knowledge manually
 knowit add rule "No direct DB access from controllers" \
-  "All database access goes through repository classes. Controllers call services." \
+  "All database access goes through repository classes." \
   --scope repo --repo api-gateway --tags architecture,layers
 
 # Search
 knowit search "database access pattern"
 
-# Resolve context before a task
+# Resolve context for a task
 knowit resolve "implement user authentication" --repo api-gateway --domain auth
 
-# Inspect the knowledge base
-knowit stats --source local
-knowit list --source local --repo api-gateway
-knowit show <entry-id> --source local
+# Browse the knowledge base
+knowit list --repo api-gateway
+knowit show <entry-id>
+knowit stats
 
 # Source management
 knowit source list
-knowit source connect local
-knowit source connect notion --mcp-server-name notion
+knowit source connect notion
 knowit source show notion
-knowit source add-mcp "notion-memory" "node" \
-  --args notion-server.js \
-  --store-tool store_page \
-  --search-tool search_pages \
-  --resolve-tool resolve_notes
 ```
 
-Start the MCP server directly:
-
-```bash
-knowit serve
-```
+---
 
 ## Knowledge model
 
-### Types
+Knowit stores structured entries, not flat text.
 
-| Type | When to use |
+**Types** — what kind of knowledge it is:
+
+| Type | Use for |
 |---|---|
-| `rule` | Constraints the codebase enforces (validation rules, invariants) |
-| `architecture` | Structural decisions about how the system is organized |
-| `pattern` | Reusable implementation approaches the team has adopted |
-| `decision` | Past decisions with rationale (ADRs, resolved debates) |
+| `rule` | Hard constraints the codebase must enforce |
+| `architecture` | How the system is structured and why |
+| `pattern` | Reusable implementation approaches |
+| `decision` | Past decisions with rationale (ADRs) |
 | `convention` | Naming, formatting, and style agreements |
-| `note` | Everything else — observations, open questions, incident context |
+| `note` | Observations, open questions, incident context |
 
-### Scopes
+**Scopes** — who it applies to:
 
-| Scope | Requires | When to use |
-|---|---|---|
-| `global` | — | Applies everywhere |
-| `team` | — | Applies to all repos in the team |
-| `repo` | `repo` field | Specific to one repository |
-| `domain` | `repo` + `domain` fields | Specific to a bounded domain within a repo |
+| Scope | Use for |
+|---|---|
+| `global` | Applies everywhere |
+| `team` | Applies across all repos in the team |
+| `repo` | Specific to one repository |
+| `domain` | Specific to a bounded domain within a repo |
 
-### Confidence
+Entries also carry a **confidence score** (0–1), so agents can distinguish authoritative decisions from provisional notes.
 
-The `confidence` field (0–1) lets you distinguish authoritative decisions from provisional notes. Agents and search results can weight high-confidence entries appropriately.
+---
 
-## Source connection model
+## Semantic search
 
-Knowit now has two source-connection paths:
-
-- first-class known providers such as `local` and `notion`
-- advanced manual MCP registration for custom providers
-
-Use `source connect` for product-facing providers:
+If you set `OPENAI_API_KEY`, Knowit uses embeddings for semantic search — relevant results even when your query doesn't match exact keywords. Without it, Knowit falls back to text and tag matching. Both work.
 
 ```bash
-knowit source connect local
-knowit source connect notion --mcp-server-name notion
-knowit source show notion
+export OPENAI_API_KEY=sk-...
+knowit search "how do we handle payment retries"
+# returns entries about retry logic, idempotency, and payment state — even if none say "retry" verbatim
 ```
 
-Provider behavior:
+---
 
-- `local`: first-party storage owned directly by Knowit
-- `notion`: routed provider metadata and guidance; the canonical artifact may live in Notion and the agent should use the Notion MCP directly
+## Notion integration
 
-## External MCP sources
-
-`knowit source add-mcp` is the advanced escape hatch for custom MCP integrations. Use it when you are integrating an MCP server that Knowit does not recognize as a first-class provider.
-
-Register a custom source:
+Connect Notion as a knowledge source and Knowit will route read/write operations to the right place, surfacing relevant context alongside routing guidance.
 
 ```bash
-knowit source add-mcp "notion-memory" "node" \
-  --args notion-server.js \
-  --store-tool store_knowledge \
-  --search-tool search_knowledge \
-  --resolve-tool resolve_context
+knowit source connect notion
 ```
 
-Then target it explicitly:
+When an agent calls `resolve_source_action` for a Notion-backed artifact, Knowit tells it exactly which MCP tool to call next and what to store back in Knowit afterward.
 
-```bash
-knowit add note "Design sync notes" "Decided on card-based layout for mobile." \
-  --source notion-memory
-knowit search "mobile layout" --source notion-memory
-```
+---
 
 ## Configuration
 
 | Variable | Description |
 |---|---|
-| `KNOWIT_DB_PATH` | Override the database path (enables team-shared databases) |
+| `KNOWIT_DB_PATH` | Path to the SQLite database (use this for shared team databases) |
 | `KNOWIT_STORAGE_SCOPE` | `project` (default), `global`, or `custom` |
 | `OPENAI_API_KEY` | Enables semantic search via embeddings (optional) |
-| `KNOWIT_LOG_LEVEL` | Server log verbosity (`debug`, `info`, `warn`, `error`) |
+| `KNOWIT_LOG_LEVEL` | Log verbosity: `debug`, `info`, `warn`, `error` |
 
-Storage defaults:
+**Default database locations:**
 
 | Scope | Path |
 |---|---|
-| `project` | `<repo>/.knowit/knowit.db` |
+| `project` | `.knowit/knowit.db` inside the current repo |
 | `global` | `~/.knowit/knowit.db` |
 | `custom` | Value of `KNOWIT_DB_PATH` |
 
-## MCP resources
+---
 
-| Resource | Description |
-|---|---|
-| `knowit://sources` | List of configured sources |
-| `knowit://entries/local` | All entries in the local source |
-| `knowit://entries/local/{id}` | A single entry by ID |
+## License
 
-## Limitations
-
-- External MCP sources are launched over stdio only (HTTP transport not yet supported)
-- There is no automatic schema translation for arbitrary third-party MCP servers — tool mapping is explicit by design
-- There is no GUI — all interaction is via CLI or MCP tools
-- Repo-scoped and domain-scoped entries require the `repo` (and `domain`) fields to be set
-- Local storage does not depend on `OPENAI_API_KEY`; embeddings are an optional enhancement
+MIT — see [LICENSE](LICENSE).
