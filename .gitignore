@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .claude/
+.mcp.json
 .knowit/
 knowit.db
 knowit.db-shm

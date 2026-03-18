@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import dotenv from "dotenv";
 import { addCommand } from "./commands/add.js";
+import { installCommand } from "./commands/install.js";
 import { initCommand } from "./commands/init.js";
 import { listCommand } from "./commands/list.js";
 import { resolveCommand } from "./commands/resolve.js";
@@ -21,7 +22,7 @@ const program = new Command();
 program
   .name("knowit")
   .description("Shared team memory for AI coding agents")
-  .version("0.2.1");
+  .version("0.2.2");
 
 program
   .command("serve")
@@ -29,6 +30,19 @@ program
   .action(async () => {
     await startMcpServer();
   });
+
+program
+  .command("install")
+  .description("Interactively install Knowit into Claude Code and Codex")
+  .option("--client <client>", "Target client: claude, codex, or both")
+  .option("--scope <scope>", "Install scope: project or global")
+  .option("--source <source>", "Preferred source: local or notion")
+  .option("--mcp-server-name <mcpServerName>", "Downstream MCP server name for routed sources like notion")
+  .option("--migrate-md", "Import detected markdown knowledge files into Knowit")
+  .option("--markdown-path <markdownPath...>", "Specific markdown files to import")
+  .option("--yes", "Apply without a confirmation prompt")
+  .option("--dry-run", "Preview the install plan without applying it")
+  .action(installCommand);
 
 program
   .command("init")

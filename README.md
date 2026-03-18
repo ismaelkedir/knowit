@@ -34,7 +34,19 @@ npm install -g knowit
 knowit init
 ```
 
-### 2. Register with your AI client
+### 2. Run the interactive installer
+
+```bash
+knowit install
+```
+
+The installer can:
+- register the Knowit MCP with Claude Code, Codex, or both
+- add or update client instruction files
+- connect a preferred source such as `local` or `notion`
+- import common knowledge markdown files like `AGENTS.md`, `CLAUDE.md`, `ARCHITECTURE.md`, `PRD.md`, and ADR-style docs into Knowit
+
+### 3. Register manually if you prefer
 
 **Claude Code:**
 ```bash
@@ -50,7 +62,7 @@ codex mcp add knowit \
   -- knowit serve
 ```
 
-### 3. Tell your agent to use it
+### 4. Tell your agent to use it
 
 Add this to your `CLAUDE.md` or `AGENTS.md`:
 
@@ -102,6 +114,10 @@ From this point, any rule, decision, or pattern stored by any developer's agent 
 ## CLI
 
 ```bash
+# Interactive client setup
+knowit install
+knowit install --client both --scope project --source notion --migrate-md
+
 # Store knowledge manually
 knowit add rule "No direct DB access from controllers" \
   "All database access goes through repository classes." \

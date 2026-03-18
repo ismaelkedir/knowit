@@ -15,7 +15,7 @@ export const createMcpServer = (): McpServer => {
 
   const server = new McpServer({
     name: "knowit",
-    version: "0.2.1",
+    version: "0.2.2",
   });
 
   registerTools(server, memoryService);
