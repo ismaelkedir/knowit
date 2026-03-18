@@ -285,7 +285,7 @@ export class MemoryService {
 
     const localSource = this.sourceRepository.getSourceById("local");
     if (!localSource) {
-      throw new Error("Local source is missing. Run knowit init to recreate it.");
+      throw new Error("Local source is missing. Run knowit install or knowit init to recreate it.");
     }
 
     return localSource;

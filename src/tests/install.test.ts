@@ -26,6 +26,8 @@ test("detectMarkdownCandidates only picks knowledge-style markdown files", () =>
 
   try {
     fs.mkdirSync(path.join(cwd, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# Agent instructions\n");
+    fs.writeFileSync(path.join(cwd, "CLAUDE.md"), "# Claude instructions\n");
     fs.writeFileSync(path.join(cwd, "ARCHITECTURE.md"), "# Architecture\n");
     fs.writeFileSync(path.join(cwd, "PRD.md"), "# Product Requirements\n");
     fs.writeFileSync(path.join(cwd, "README.md"), "# Ignore me\n");
@@ -119,15 +121,23 @@ test("applyInstallPlan installs instructions, registers clients, imports markdow
     });
 
     assert.equal(result.importedEntryCount, 1);
+    assert.equal(result.registrationOutcomes.length, 2);
+    assert.ok(result.registrationOutcomes.every((outcome) => outcome.succeeded));
     assert.equal(commands.length, 2);
     assert.equal(commands[0]?.command, "claude");
     assert.equal(commands[1]?.command, "codex");
 
     const claudeInstructions = fs.readFileSync(path.join(cwd, ".claude", "CLAUDE.md"), "utf8");
     const codexInstructions = fs.readFileSync(path.join(cwd, "AGENTS.md"), "utf8");
+    const projectMcpConfig = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf8")) as {
+      mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+    };
 
     assert.match(claudeInstructions, /Knowit Memory/);
     assert.match(codexInstructions, /resolve_source_action/);
+    assert.equal(projectMcpConfig.mcpServers?.knowit?.command, "knowit");
+    assert.deepEqual(projectMcpConfig.mcpServers?.knowit?.args, ["serve"]);
+    assert.equal(projectMcpConfig.mcpServers?.knowit?.env?.KNOWIT_DB_PATH, ".knowit/knowit.db");
 
     process.env.KNOWIT_DB_PATH = plan.dbPath;
     resetDatabase();

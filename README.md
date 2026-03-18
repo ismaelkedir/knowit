@@ -9,7 +9,7 @@
 
 Your AI agent has no memory. Every session starts from zero — re-explaining the same conventions, violating the same rules, forgetting the decisions you made last week.
 
-Knowit fixes that. It's an MCP server that gives Claude Code, Codex, and any MCP-compatible agent a persistent, queryable knowledge base for your project. Store architecture decisions, coding rules, patterns, and context once. Every agent session — and every developer on your team — starts informed.
+Knowit fixes that. It's an MCP server that gives Claude Code, Codex, and any MCP-compatible agent a persistent, queryable knowledge base for your project. Store architecture decisions, coding rules, patterns, and context once, without scattering more `AGENTS.md`, `ARCHITECTURE.md`, `PATTERNS.md`, or ADR files through every repo. Every agent session — and every developer on your team — starts informed.
 
 ```bash
 npm install -g knowit
@@ -19,7 +19,7 @@ npm install -g knowit
 
 ## How it works
 
-Agents interact with Knowit through MCP tools. Before planning a task, an agent calls `resolve_context` and gets back the relevant rules, decisions, and patterns for that work. After a session, it calls `capture_session_learnings` to persist what it discovered. Knowledge accumulates. Nothing is forgotten.
+Agents interact with Knowit through MCP tools. Before planning a task, an agent calls `resolve_context` and gets back the relevant rules, decisions, and patterns for that work. After a session, it calls `capture_session_learnings` to persist what it discovered. Knowledge accumulates. Nothing is forgotten, and your repos stay focused on source code instead of long-lived memory markdown.
 
 For teams, every developer points their agent at the same database. One developer's agent stores a convention — every other agent on the repo can find it immediately.
 
@@ -31,35 +31,58 @@ For teams, every developer points their agent at the same database. One develope
 
 ```bash
 npm install -g knowit
-knowit init
-```
-
-### 2. Run the interactive installer
-
-```bash
 knowit install
 ```
 
-The installer can:
-- register the Knowit MCP with Claude Code, Codex, or both
-- add or update client instruction files
-- connect a preferred source such as `local` or `notion`
-- import common knowledge markdown files like `AGENTS.md`, `CLAUDE.md`, `ARCHITECTURE.md`, `PRD.md`, and ADR-style docs into Knowit
+`knowit install` is now the primary setup flow. It initializes the local Knowit database automatically when needed, then handles client registration, instruction setup, and optional markdown migration so existing architecture or decision docs can move into Knowit instead of continuing to pile up in the repo.
+
+### 2. Optional: initialize storage manually
+
+```bash
+knowit init
+```
+
+Use `knowit init` only when you want the low-level storage bootstrap without running the client installation wizard.
 
 ### 3. Register manually if you prefer
+
+If you want to skip the wizard, the manual setup path is:
+- register the Knowit MCP with Claude Code, Codex, or both
+- add or update client instruction files
+- write a portable project `.mcp.json` that uses the globally installed `knowit serve`
+- connect a preferred source such as `local` or `notion`
+- import common knowledge markdown files like `ARCHITECTURE.md`, `PRD.md`, and ADR-style docs into Knowit
+- skip agent instruction files like `AGENTS.md` and `CLAUDE.md` during migration
 
 **Claude Code:**
 ```bash
 claude mcp add -s user \
-  -e KNOWIT_DB_PATH="$HOME/.knowit/knowit.db" \
-  knowit -- knowit serve
+  knowit knowit serve \
+  -e KNOWIT_DB_PATH="$PWD/.knowit/knowit.db"
 ```
 
 **Codex:**
 ```bash
 codex mcp add knowit \
-  --env KNOWIT_DB_PATH="$HOME/.knowit/knowit.db" \
+  --env KNOWIT_DB_PATH="$PWD/.knowit/knowit.db" \
   -- knowit serve
+```
+
+For project-scoped clients that read `.mcp.json`, `knowit install` also writes a portable config that uses:
+
+```json
+{
+  "mcpServers": {
+    "knowit": {
+      "type": "stdio",
+      "command": "knowit",
+      "args": ["serve"],
+      "env": {
+        "KNOWIT_DB_PATH": ".knowit/knowit.db"
+      }
+    }
+  }
+}
 ```
 
 ### 4. Tell your agent to use it
@@ -85,12 +108,12 @@ The real power of Knowit is at the team level. Point every developer's agent at 
 
 ```bash
 # Initialize a shared database (on a shared volume, or commit the path convention to your repo)
-KNOWIT_DB_PATH=/shared/team/knowit.db knowit init
+KNOWIT_DB_PATH=/shared/team/knowit.db knowit install --scope global --client claude
 
 # Each developer registers against the same path
 claude mcp add -s user \
-  -e KNOWIT_DB_PATH=/shared/team/knowit.db \
-  knowit -- knowit serve
+  knowit knowit serve \
+  -e KNOWIT_DB_PATH=/shared/team/knowit.db
 ```
 
 From this point, any rule, decision, or pattern stored by any developer's agent is immediately available to everyone else's.
@@ -118,6 +141,9 @@ From this point, any rule, decision, or pattern stored by any developer's agent 
 knowit install
 knowit install --client both --scope project --source notion --migrate-md
 
+# Low-level storage bootstrap only
+knowit init
+
 # Store knowledge manually
 knowit add rule "No direct DB access from controllers" \
   "All database access goes through repository classes." \
@@ -144,7 +170,7 @@ knowit source show notion
 
 ## Knowledge model
 
-Knowit stores structured entries, not flat text.
+Knowit stores structured entries instead of forcing durable engineering memory to live as loose repo markdown.
 
 **Types** — what kind of knowledge it is:
 

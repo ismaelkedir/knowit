@@ -2,7 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { MemoryService } from "../services/memoryService.js";
 import { resetDatabase } from "../db/database.js";
 import type { KnownSourceProvider } from "../types/source.js";
@@ -31,6 +30,7 @@ export interface InstallPlan {
   repo: string;
   dbPath: string;
   instructionTargets: InstallInstructionTarget[];
+  projectMcpConfigPath: string | null;
   markdownImports: MarkdownImportPlan[];
   mcpRegistrations: ClientRegistrationPlan[];
   warnings: string[];
@@ -58,10 +58,18 @@ export interface InstallResult {
   plan: InstallPlan;
   importedEntryCount: number;
   instructionPaths: string[];
+  registrationOutcomes: ClientRegistrationOutcome[];
 }
 
 export interface CommandRunner {
   run(command: string, args: string[], cwd: string): void;
+}
+
+export interface ClientRegistrationOutcome {
+  client: SupportedClient;
+  succeeded: boolean;
+  command: string;
+  error?: string;
 }
 
 const knowitStartMarker = "<!-- knowit:start -->";
@@ -80,11 +88,14 @@ const defaultCommandRunner: CommandRunner = {
   },
 };
 
+export const formatCommand = (command: string, args: string[]): string =>
+  [command, ...args]
+    .map((part) => (/[\s"'$]/.test(part) ? JSON.stringify(part) : part))
+    .join(" ");
+
 const ignoredDirectories = new Set([".git", ".knowit", "node_modules", "dist", "coverage"]);
 const ignoredMarkdownFiles = new Set(["readme.md", "changelog.md", "license.md"]);
 const preferredMarkdownPatterns = [
-  /^agents\.md$/i,
-  /^claude\.md$/i,
   /^architecture\.md$/i,
   /^conventions?\.md$/i,
   /^patterns?\.md$/i,
@@ -94,8 +105,6 @@ const preferredMarkdownPatterns = [
   /^adr[-_ ].*\.md$/i,
   /^adr\d+.*\.md$/i,
 ];
-
-const localCliPath = fileURLToPath(new URL("../cli/index.js", import.meta.url));
 
 const unique = <T>(values: T[]): T[] => Array.from(new Set(values));
 
@@ -215,6 +224,9 @@ const getInstructionPath = (client: SupportedClient, scope: InstallScope, cwd: s
 const getInstallDatabasePath = (scope: InstallScope, cwd: string): string =>
   scope === "global" ? path.join(os.homedir(), ".knowit", "knowit.db") : path.join(cwd, ".knowit", "knowit.db");
 
+const getProjectMcpConfigPath = (scope: InstallScope, cwd: string): string | null =>
+  scope === "project" ? path.join(cwd, ".mcp.json") : null;
+
 const buildInstructionBlock = (
   client: SupportedClient,
   sourceProvider: KnownSourceProvider,
@@ -285,9 +297,6 @@ const buildMcpRegistrationPlan = (
   scope: InstallScope,
   dbPath: string,
 ): ClientRegistrationPlan => {
-  const nodeBinary = process.execPath;
-  const serverArgs = [localCliPath, "serve"];
-
   if (client === "claude") {
     const claudeScope = scope === "project" ? "project" : "user";
     return {
@@ -299,8 +308,8 @@ const buildMcpRegistrationPlan = (
         "-s",
         claudeScope,
         "knowit",
-        nodeBinary,
-        ...serverArgs,
+        "knowit",
+        "serve",
         "-e",
         `KNOWIT_DB_PATH=${dbPath}`,
       ],
@@ -310,8 +319,39 @@ const buildMcpRegistrationPlan = (
   return {
     client,
     command: "codex",
-    args: ["mcp", "add", "knowit", "--env", `KNOWIT_DB_PATH=${dbPath}`, "--", nodeBinary, ...serverArgs],
+    args: ["mcp", "add", "knowit", "--env", `KNOWIT_DB_PATH=${dbPath}`, "--", "knowit", "serve"],
   };
+};
+
+const mergeProjectMcpConfig = (existingContents: string | null): string => {
+  const parsed =
+    existingContents && existingContents.trim().length > 0
+      ? (JSON.parse(existingContents) as { mcpServers?: Record<string, unknown> })
+      : {};
+
+  const mcpServers =
+    parsed.mcpServers && typeof parsed.mcpServers === "object" && !Array.isArray(parsed.mcpServers)
+      ? parsed.mcpServers
+      : {};
+
+  return `${JSON.stringify(
+    {
+      ...parsed,
+      mcpServers: {
+        ...mcpServers,
+        knowit: {
+          type: "stdio",
+          command: "knowit",
+          args: ["serve"],
+          env: {
+            KNOWIT_DB_PATH: ".knowit/knowit.db",
+          },
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
 };
 
 export const detectMarkdownCandidates = (cwd: string): string[] => walkMarkdownFiles(cwd);
@@ -347,6 +387,7 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
     repo: selections.repo,
     dbPath: getInstallDatabasePath(selections.scope, selections.cwd),
     instructionTargets,
+    projectMcpConfigPath: getProjectMcpConfigPath(selections.scope, selections.cwd),
     markdownImports,
     mcpRegistrations: selections.clients.map((client) =>
       buildMcpRegistrationPlan(client, selections.scope, getInstallDatabasePath(selections.scope, selections.cwd)),
@@ -378,8 +419,24 @@ export const applyInstallPlan = async (
       isDefault: true,
     });
 
+    const registrationOutcomes: ClientRegistrationOutcome[] = [];
     for (const registration of plan.mcpRegistrations) {
-      runner.run(registration.command, registration.args, options.cwd);
+      const commandText = formatCommand(registration.command, registration.args);
+      try {
+        runner.run(registration.command, registration.args, options.cwd);
+        registrationOutcomes.push({
+          client: registration.client,
+          succeeded: true,
+          command: commandText,
+        });
+      } catch (error: unknown) {
+        registrationOutcomes.push({
+          client: registration.client,
+          succeeded: false,
+          command: commandText,
+          error: error instanceof Error ? error.message : "Unknown registration error",
+        });
+      }
     }
 
     for (const target of plan.instructionTargets) {
@@ -387,6 +444,13 @@ export const applyInstallPlan = async (
       const current = fs.existsSync(target.path) ? fs.readFileSync(target.path, "utf8") : null;
       const merged = mergeInstructionFile(current, target.client, plan.sourceProvider, plan.sourceId);
       fs.writeFileSync(target.path, merged, "utf8");
+    }
+
+    if (plan.projectMcpConfigPath) {
+      const currentMcpConfig = fs.existsSync(plan.projectMcpConfigPath)
+        ? fs.readFileSync(plan.projectMcpConfigPath, "utf8")
+        : null;
+      fs.writeFileSync(plan.projectMcpConfigPath, mergeProjectMcpConfig(currentMcpConfig), "utf8");
     }
 
     let importedEntryCount = 0;
@@ -417,6 +481,7 @@ export const applyInstallPlan = async (
       plan,
       importedEntryCount,
       instructionPaths: plan.instructionTargets.map((target) => target.path),
+      registrationOutcomes,
     };
   } finally {
     resetDatabase();

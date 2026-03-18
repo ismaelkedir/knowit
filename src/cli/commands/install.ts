@@ -5,6 +5,7 @@ import {
   applyInstallPlan,
   createInstallPlan,
   detectMarkdownCandidates,
+  formatCommand,
   type InstallPlan,
   type InstallScope,
   type InstallSelections,
@@ -117,6 +118,17 @@ const printPlan = (plan: InstallPlan): void => {
     }
   }
 
+  if (plan.projectMcpConfigPath) {
+    output.write(`- Project MCP config: ${plan.projectMcpConfigPath}\n`);
+  }
+
+  if (plan.mcpRegistrations.length > 0) {
+    output.write("- MCP registration commands:\n");
+    for (const registration of plan.mcpRegistrations) {
+      output.write(`  - ${registration.client}: ${formatCommand(registration.command, registration.args)}\n`);
+    }
+  }
+
   if (plan.markdownImports.length > 0) {
     output.write("- Markdown imports:\n");
     for (const markdownFile of plan.markdownImports) {
@@ -194,14 +206,18 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
 
     if (!options.migrateMd) {
       const detected = detectMarkdownCandidates(cwd);
-      migrateMarkdown = await askYesNo(
-        rl,
-        detected.length > 0
-          ? `Import ${detected.length} existing markdown knowledge files into Knowit?`
-          : "No markdown knowledge files were auto-detected. Proceed without markdown import?",
-        detected.length > 0,
-      );
-      resolvedMarkdownPaths = migrateMarkdown ? detected : [];
+      if (detected.length > 0) {
+        migrateMarkdown = await askYesNo(
+          rl,
+          `Import ${detected.length} existing markdown knowledge files into Knowit?`,
+          true,
+        );
+        resolvedMarkdownPaths = migrateMarkdown ? detected : [];
+      } else {
+        output.write("No importable markdown knowledge files detected. Continuing without migration.\n\n");
+        migrateMarkdown = false;
+        resolvedMarkdownPaths = [];
+      }
     } else if (resolvedMarkdownPaths.length === 0) {
       resolvedMarkdownPaths = detectMarkdownCandidates(cwd);
     }
@@ -251,6 +267,18 @@ export const installCommand = async (options: InstallOptions): Promise<void> => 
 
   output.write(`Knowit installed for ${result.plan.clients.join(", ")}.\n`);
   output.write(`Database: ${result.plan.dbPath}\n`);
+  if (result.registrationOutcomes.length > 0) {
+    output.write("MCP registration:\n");
+    for (const outcome of result.registrationOutcomes) {
+      if (outcome.succeeded) {
+        output.write(`- ${outcome.client}: installed automatically\n`);
+      } else {
+        output.write(`- ${outcome.client}: automatic install failed\n`);
+        output.write(`  Error: ${outcome.error}\n`);
+        output.write(`  Run manually: ${outcome.command}\n`);
+      }
+    }
+  }
   if (result.instructionPaths.length > 0) {
     output.write(`Instruction files updated:\n`);
     for (const instructionPath of result.instructionPaths) {

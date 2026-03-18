@@ -33,7 +33,7 @@ program
 
 program
   .command("install")
-  .description("Interactively install Knowit into Claude Code and Codex")
+  .description("Install Knowit into AI clients and initialize storage if needed")
   .option("--client <client>", "Target client: claude, codex, or both")
   .option("--scope <scope>", "Install scope: project or global")
   .option("--source <source>", "Preferred source: local or notion")
@@ -46,7 +46,7 @@ program
 
 program
   .command("init")
-  .description("Initialize the SQLite database")
+  .description("Initialize the SQLite database manually")
   .action(initCommand);
 
 program
