@@ -460,3 +460,49 @@ test("resolveSourceAction returns routed guidance for notion source", async () =
     cleanup();
   }
 });
+
+test("direct read APIs fall back to local storage when the default source is routed", async () => {
+  const { cleanup } = createTestDatabase();
+  const originalPath = process.env.KNOWIT_DB_PATH;
+
+  try {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-default-route-read-"));
+    process.env.KNOWIT_DB_PATH = path.join(tempDir, "knowit.db");
+    resetDatabase();
+    const service = new MemoryService();
+    service.init();
+    service.connectKnownSource({
+      provider: "notion",
+      mcpServerName: "notion",
+      isDefault: true,
+    });
+
+    const entry = await service.storeKnowledge({
+      title: "Local fallback read",
+      type: "note",
+      content: "Source-optional direct reads should still use local SQLite.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["routing"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    const listed = await service.listKnowledge({ repo: "knowit", limit: 10 });
+    const fetched = await service.getKnowledgeEntry({ id: entry.id });
+    const stats = await service.getKnowledgeStats({ repo: "knowit", limit: 10 });
+
+    assert.ok(listed.some((item) => item.id === entry.id));
+    assert.equal(fetched?.id, entry.id);
+    assert.equal(stats.totalEntries, 1);
+    assert.equal(stats.byType.note, 1);
+  } finally {
+    resetDatabase();
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+    cleanup();
+  }
+});

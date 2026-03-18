@@ -126,7 +126,7 @@ export class SourceRepository {
       return this.getSourceById(local.id) as KnowledgeSource;
     }
 
-    return this.upsertRouteSource(parsed.provider, {
+    const routedSource = this.upsertRouteSource(parsed.provider, {
       mcpServerName: parsed.mcpServerName ?? "notion",
       setupHint:
         "Ensure the Notion MCP server is installed in the AI client. Knowit does not install or control the Notion MCP yet.",
@@ -135,6 +135,13 @@ export class SourceRepository {
       writeHint:
         "Use the Notion MCP server to create or update the canonical artifact in Notion, then optionally store distilled memory back in Knowit.",
     });
+
+    if (parsed.isDefault) {
+      this.setDefaultSource(routedSource.id);
+      return this.getSourceById(routedSource.id) as KnowledgeSource;
+    }
+
+    return routedSource;
   }
 
   listSources(): KnowledgeSource[] {

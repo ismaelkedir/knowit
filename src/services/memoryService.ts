@@ -72,7 +72,7 @@ export class MemoryService {
   async storeKnowledge(input: StoreKnowledgeInput): Promise<KnowledgeEntry> {
     this.init();
     const parsedInput = storeKnowledgeInputSchema.parse(input);
-    const source = this.getSelectedSource(parsedInput.source);
+    const source = parsedInput.source ? this.getSelectedSource(parsedInput.source) : this.getPreferredDirectSource();
     const provider = this.sourceRegistry.createProvider(source);
     return provider.storeKnowledge(parsedInput);
   }
@@ -120,7 +120,7 @@ export class MemoryService {
   async listKnowledge(filters: KnowledgeListFilters & { source?: string }): Promise<KnowledgeEntry[]> {
     this.init();
     const parsedFilters = knowledgeListFiltersSchema.parse(filters);
-    const source = this.getSelectedSource(filters.source);
+    const source = filters.source ? this.getSelectedSource(filters.source) : this.getPreferredDirectSource();
     const provider = this.sourceRegistry.createProvider(source);
 
     if (!provider.listKnowledge) {
@@ -132,7 +132,7 @@ export class MemoryService {
 
   async getKnowledgeEntry(input: { id: string; source?: string }): Promise<KnowledgeEntry | null> {
     this.init();
-    const source = this.getSelectedSource(input.source);
+    const source = input.source ? this.getSelectedSource(input.source) : this.getPreferredDirectSource();
 
     if (source.kind === "sqlite") {
       return this.knowledgeRepository.getEntryById(input.id);
@@ -275,5 +275,19 @@ export class MemoryService {
     }
 
     return source;
+  }
+
+  private getPreferredDirectSource(): KnowledgeSource {
+    const defaultSource = this.sourceRepository.getDefaultSource();
+    if (defaultSource.kind !== "route") {
+      return defaultSource;
+    }
+
+    const localSource = this.sourceRepository.getSourceById("local");
+    if (!localSource) {
+      throw new Error("Local source is missing. Run knowit init to recreate it.");
+    }
+
+    return localSource;
   }
 }
