@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "knowit": {
+      "type": "stdio",
+      "command": "knowit",
+      "args": [
+        "serve"
+      ],
+      "env": {
+        "KNOWIT_DB_PATH": ".knowit/knowit.db"
+      }
+    }
+  }
+}
