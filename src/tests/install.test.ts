@@ -12,6 +12,7 @@ import {
 } from "../install/installer.js";
 import { MemoryService } from "../services/memoryService.js";
 import { resetDatabase } from "../db/database.js";
+import { checkInstructionsInstalled } from "../server/instructionCheck.js";
 
 const createTempProject = (): { cwd: string; cleanup: () => void } => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-install-"));
@@ -172,5 +173,56 @@ test("applyInstallPlan installs instructions, registers clients, imports markdow
       process.env.KNOWIT_DB_PATH = originalDbPath;
     }
     cleanup();
+  }
+});
+
+test("checkInstructionsInstalled returns true when marker is present in CLAUDE.md", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-check-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "CLAUDE.md"), "# Guide\n\n<!-- knowit:start -->\nsome block\n<!-- knowit:end -->\n");
+    assert.equal(checkInstructionsInstalled(cwd), true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("checkInstructionsInstalled returns true when marker is present in AGENTS.md", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-check-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "AGENTS.md"), "<!-- knowit:start -->\nblock\n<!-- knowit:end -->\n");
+    assert.equal(checkInstructionsInstalled(cwd), true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("checkInstructionsInstalled returns true when marker is in .claude/CLAUDE.md", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-check-"));
+  try {
+    fs.mkdirSync(path.join(cwd, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".claude", "CLAUDE.md"), "<!-- knowit:start -->\nblock\n<!-- knowit:end -->\n");
+    assert.equal(checkInstructionsInstalled(cwd), true);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("checkInstructionsInstalled returns false when no candidate file contains the marker", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-check-"));
+  try {
+    fs.writeFileSync(path.join(cwd, "CLAUDE.md"), "# Normal instructions without the marker\n");
+    fs.writeFileSync(path.join(cwd, "AGENTS.md"), "# Also normal\n");
+    assert.equal(checkInstructionsInstalled(cwd), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("checkInstructionsInstalled returns false when no candidate files exist", () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-check-empty-"));
+  try {
+    assert.equal(checkInstructionsInstalled(cwd), false);
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });

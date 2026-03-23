@@ -346,6 +346,51 @@ test("storing an entry with the same logical identity updates it instead of crea
   }
 });
 
+test("local sqlite source getKnowledge returns full entries by id", async () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, failingEmbeddingGenerator);
+
+    const a = await source.storeKnowledge({
+      type: "rule", title: "Rule A", content: "Content A.", scope: "global",
+      tags: [], confidence: 1, metadata: {},
+    });
+    const b = await source.storeKnowledge({
+      type: "note", title: "Note B", content: "Content B.", scope: "global",
+      tags: [], confidence: 1, metadata: {},
+    });
+
+    const results = await source.getKnowledge!([a.id, b.id]);
+    assert.equal(results.length, 2);
+    assert.ok(results.some((e) => e.id === a.id && e.content === "Content A."));
+    assert.ok(results.some((e) => e.id === b.id && e.content === "Content B."));
+  } finally {
+    cleanup();
+  }
+});
+
+test("local sqlite source getKnowledge silently skips unknown ids", async () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, failingEmbeddingGenerator);
+
+    const entry = await source.storeKnowledge({
+      type: "note", title: "Existing", content: "Here.", scope: "global",
+      tags: [], confidence: 1, metadata: {},
+    });
+
+    const results = await source.getKnowledge!([entry.id, "00000000-0000-0000-0000-000000000000"]);
+    assert.equal(results.length, 1);
+    assert.equal(results[0]?.id, entry.id);
+  } finally {
+    cleanup();
+  }
+});
+
 test("repo and domain scoped knowledge requires routing metadata", () => {
   assert.throws(
     () =>
