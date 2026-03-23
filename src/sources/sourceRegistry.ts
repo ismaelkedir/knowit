@@ -1,6 +1,7 @@
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import type { KnowledgeSource } from "../types/source.js";
 import type { MemorySourceProvider } from "./base.js";
+import { CloudMemorySource } from "./cloudSource.js";
 import { McpMemorySource } from "./mcpSource.js";
 import { SqliteMemorySource } from "./sqliteSource.js";
 
@@ -17,6 +18,8 @@ export class SourceRegistry {
         return new SqliteMemorySource(source, this.localRepository);
       case "mcp":
         return new McpMemorySource(source);
+      case "cloud":
+        return new CloudMemorySource(source);
       case "route":
         throw new Error(
           `Source ${source.id} is a routed provider. Use its provider MCP directly based on the stored guidance.`,

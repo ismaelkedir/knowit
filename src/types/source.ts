@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const sourceKindSchema = z.enum(["sqlite", "mcp", "route"]);
+export const sourceKindSchema = z.enum(["sqlite", "mcp", "route", "cloud"]);
 export const knownSourceProviderSchema = z.enum(["local", "notion"]);
 
 export const sourceToolMapSchema = z.object({
@@ -32,10 +32,17 @@ export const routeSourceConfigSchema = z.object({
   writeHint: z.string().min(1),
 });
 
+export const cloudSourceConfigSchema = z.object({
+  mode: z.literal("cloud"),
+  apiUrl: z.string().url(),
+  token: z.string().min(1),
+});
+
 export const sourceConfigSchema = z.discriminatedUnion("mode", [
   sqliteSourceConfigSchema,
   mcpSourceConfigSchema,
   routeSourceConfigSchema,
+  cloudSourceConfigSchema,
 ]);
 
 export const knowledgeSourceSchema = z.object({
@@ -64,6 +71,7 @@ export const connectKnownSourceInputSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
+export type CloudSourceConfig = z.infer<typeof cloudSourceConfigSchema>;
 export type SourceKind = z.infer<typeof sourceKindSchema>;
 export type KnownSourceProvider = z.infer<typeof knownSourceProviderSchema>;
 export type SourceToolMap = z.infer<typeof sourceToolMapSchema>;
