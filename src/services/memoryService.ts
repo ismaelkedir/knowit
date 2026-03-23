@@ -1,5 +1,6 @@
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
+import { loadCredentials } from "../utils/credentials.js";
 import {
   knowledgeListFiltersSchema,
   knowledgeSearchFiltersSchema,
@@ -48,10 +49,44 @@ export class MemoryService {
     this.sourceRegistry = new SourceRegistry(this.knowledgeRepository);
   }
 
+  private cloudSourceBootstrapped = false;
+
   init(): void {
     this.knowledgeRepository.init();
     this.sourceRepository.init();
     this.sourceRepository.ensureLocalSource();
+    this.bootstrapCloudSource();
+  }
+
+  private bootstrapCloudSource(): void {
+    if (this.cloudSourceBootstrapped) return;
+    this.cloudSourceBootstrapped = true;
+
+    const token = process.env.KNOWIT_CLOUD_TOKEN;
+    const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? "https://useknowit.dev";
+
+    if (!token) {
+      // Fall back to credentials file
+      const creds = loadCredentials();
+      if (!creds) return;
+      this.upsertCloudSource(creds.token, creds.cloudApiUrl);
+      return;
+    }
+
+    this.upsertCloudSource(token, apiUrl);
+  }
+
+  private upsertCloudSource(token: string, apiUrl: string): void {
+    const existing = this.sourceRepository.getSourceById("cloud");
+    if (existing) return;
+
+    this.sourceRepository.upsertSyntheticSource({
+      id: "cloud",
+      name: "Knowit Cloud",
+      kind: "cloud",
+      isDefault: true,
+      config: { mode: "cloud", apiUrl, token },
+    });
   }
 
   listSources(): KnowledgeSource[] {
@@ -128,6 +163,18 @@ export class MemoryService {
     }
 
     return provider.listKnowledge(parsedFilters);
+  }
+
+  async getKnowledge(input: { ids: string[]; source?: string }): Promise<KnowledgeEntry[]> {
+    this.init();
+    const source = input.source ? this.getSelectedSource(input.source) : this.getPreferredDirectSource();
+    const provider = this.sourceRegistry.createProvider(source);
+
+    if (!provider.getKnowledge) {
+      throw new Error(`Source ${source.id} does not support fetching entries by ID.`);
+    }
+
+    return provider.getKnowledge(input.ids);
   }
 
   async getKnowledgeEntry(input: { id: string; source?: string }): Promise<KnowledgeEntry | null> {
@@ -258,10 +305,17 @@ export class MemoryService {
       return [this.sourceRegistry.createProvider(source)];
     }
 
-    return this.sourceRepository
-      .listSources()
-      .filter((source) => source.kind !== "route")
-      .map((source) => this.sourceRegistry.createProvider(source));
+    // Use only the default source. Fan-out to all sources was removed because
+    // when cloud is connected it should be the single source of truth — querying
+    // local in parallel creates noise and splits the knowledge base.
+    const defaultSource = this.sourceRepository.getDefaultSource();
+    if (defaultSource.kind === "route") {
+      // Routed default (e.g. Notion) — fall back to local for direct queries
+      const localSource = this.sourceRepository.getSourceById("local");
+      if (!localSource) throw new Error("Local source is missing. Run knowit install to recreate it.");
+      return [this.sourceRegistry.createProvider(localSource)];
+    }
+    return [this.sourceRegistry.createProvider(defaultSource)];
   }
 
   private getSelectedSource(sourceId?: string): KnowledgeSource {

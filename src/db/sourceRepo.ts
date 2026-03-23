@@ -186,6 +186,54 @@ export class SourceRepository {
     this.db.prepare("UPDATE knowledge_sources SET is_default = 0 WHERE is_default = 1").run();
   }
 
+  upsertSyntheticSource(input: {
+    id: string;
+    name: string;
+    kind: string;
+    isDefault: boolean;
+    config: Record<string, unknown>;
+  }): void {
+    const now = new Date().toISOString();
+    const existing = this.getSourceById(input.id);
+
+    if (input.isDefault) {
+      this.clearDefaultSource();
+    }
+
+    if (existing) {
+      this.db
+        .prepare(
+          `UPDATE knowledge_sources
+           SET name = @name, kind = @kind, config = @config,
+               is_default = @isDefault, updated_at = @updatedAt
+           WHERE id = @id`,
+        )
+        .run({
+          id: input.id,
+          name: input.name,
+          kind: input.kind,
+          config: JSON.stringify(input.config),
+          isDefault: input.isDefault ? 1 : 0,
+          updatedAt: now,
+        });
+    } else {
+      this.db
+        .prepare(
+          `INSERT INTO knowledge_sources (id, name, kind, config, is_default, created_at, updated_at)
+           VALUES (@id, @name, @kind, @config, @isDefault, @createdAt, @updatedAt)`,
+        )
+        .run({
+          id: input.id,
+          name: input.name,
+          kind: input.kind,
+          config: JSON.stringify(input.config),
+          isDefault: input.isDefault ? 1 : 0,
+          createdAt: now,
+          updatedAt: now,
+        });
+    }
+  }
+
   private upsertRouteSource(
     provider: Exclude<KnownSourceProvider, "local">,
     input: {
