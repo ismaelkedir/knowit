@@ -13,6 +13,9 @@ import { sourceAddMcpCommand } from "./commands/sourceAddMcp.js";
 import { sourceConnectCommand } from "./commands/sourceConnect.js";
 import { sourceListCommand } from "./commands/sourceList.js";
 import { sourceShowCommand } from "./commands/sourceShow.js";
+import { registerLoginCommand } from "./commands/login.js";
+import { registerLogoutCommand } from "./commands/logout.js";
+import { registerWhoamiCommand } from "./commands/whoami.js";
 import { startMcpServer } from "../server/mcpServer.js";
 
 dotenv.config();
@@ -145,6 +148,10 @@ sourceProgram
   .option("--resolve-tool <resolveTool>", "Remote tool name used to resolve context")
   .option("--default", "Mark this source as the default")
   .action(sourceAddMcpCommand);
+
+registerLoginCommand(program);
+registerLogoutCommand(program);
+registerWhoamiCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "Unknown CLI error";
