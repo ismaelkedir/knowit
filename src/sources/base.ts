@@ -18,4 +18,5 @@ export interface MemorySourceProvider {
   }): Promise<KnowledgeResult[]>;
   resolveContext(input: ResolveContextInput): Promise<KnowledgeResult[]>;
   listKnowledge?(filters: KnowledgeListFilters): Promise<KnowledgeEntry[]>;
+  getKnowledge?(ids: string[]): Promise<KnowledgeEntry[]>;
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { MemoryService } from "../services/memoryService.js";
+import { INSTRUCTIONS_WARNING } from "./instructionCheck.js";
 import {
   knowledgeScopeSchema,
   knowledgeTypeSchema,
@@ -36,6 +37,7 @@ const storeKnowledgeSchema = {
   type: knowledgeTypeSchema,
   title: z.string().min(1),
   content: z.string().min(1),
+  summary: z.string().max(300).optional(),
   scope: knowledgeScopeSchema.default("global"),
   repo: z.string().optional(),
   domain: z.string().optional(),
@@ -73,6 +75,11 @@ const resolveSourceActionSchema = {
   domain: z.string().optional(),
 };
 
+const getKnowledgeSchema = {
+  ids: z.array(z.string()).min(1).max(20),
+  source: z.string().optional(),
+};
+
 const captureSessionLearningsSchema = {
   learnings: z
     .array(
@@ -92,11 +99,13 @@ const captureSessionLearningsSchema = {
   source: z.string().optional(),
 };
 
-const asTextContent = (value: unknown) => ({
+const asTextContent = (value: unknown, warning?: string) => ({
   content: [
     {
       type: "text" as const,
-      text: JSON.stringify(value, null, 2),
+      text: warning
+        ? `${warning}\n\n${JSON.stringify(value, null, 2)}`
+        : JSON.stringify(value, null, 2),
     },
   ],
 });
@@ -187,11 +196,12 @@ const withToolLogging = <TInput extends Record<string, unknown> | undefined>(
   };
 };
 
-export const registerTools = (server: McpServer, memoryService: MemoryService): void => {
+export const registerTools = (server: McpServer, memoryService: MemoryService, instructionsInstalled = true): void => {
+  const warning = instructionsInstalled ? undefined : INSTRUCTIONS_WARNING;
   server.tool(
     "list_sources",
     "List Knowit sources, including local and external MCP-backed sources.",
-    withToolLogging("list_sources", async () => asTextContent(memoryService.listSources())),
+    withToolLogging("list_sources", async () => asTextContent(memoryService.listSources(), warning)),
   );
 
   server.tool(
@@ -225,7 +235,7 @@ export const registerTools = (server: McpServer, memoryService: MemoryService): 
 
   server.tool(
     "search_knowledge",
-    "Search knowledge across one or more Knowit sources.",
+    "Search knowledge across one or more Knowit sources. Returns title, summary, and metadata — not full content. Call get_knowledge with the returned IDs to fetch full content for relevant entries.",
     searchKnowledgeSchema,
     withToolLogging("search_knowledge", async (input) => {
       const results = await memoryService.searchKnowledge(input);
@@ -234,8 +244,18 @@ export const registerTools = (server: McpServer, memoryService: MemoryService): 
   );
 
   server.tool(
+    "get_knowledge",
+    "Fetch full content for one or more knowledge entries by ID. Use after search_knowledge or resolve_context to retrieve the complete content of relevant entries (Phase 2 of tiered retrieval).",
+    getKnowledgeSchema,
+    withToolLogging("get_knowledge", async (input) => {
+      const entries = await memoryService.getKnowledge(input);
+      return asTextContent(entries, warning);
+    }),
+  );
+
+  server.tool(
     "resolve_context",
-    "Resolve implementation context across one or more Knowit sources.",
+    "Resolve implementation context across one or more Knowit sources. Returns title, summary, and metadata — not full content. Call get_knowledge with the returned IDs to fetch full content for relevant entries.",
     resolveContextSchema,
     withToolLogging("resolve_context", async (input) => {
       const parsedInput = resolveContextInputSchema.parse(input);

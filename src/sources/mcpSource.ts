@@ -139,8 +139,8 @@ export class McpMemorySource implements MemorySourceProvider {
     });
     const payload = extractToolPayload(result);
     const normalized = normalizeRemoteEntry(this.definition, payload, input);
-    const { sourceId: _sourceId, sourceKind: _sourceKind, sourceName: _sourceName, score: _score, ...entry } = normalized;
-    return entry;
+    const { sourceId: _sourceId, sourceKind: _sourceKind, sourceName: _sourceName, score: _score, matchedOn: _matchedOn, ...entry } = normalized;
+    return { ...entry, content: entry.content ?? input.content };
   }
 
   async searchKnowledge(input: {

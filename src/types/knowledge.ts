@@ -22,6 +22,7 @@ export const knowledgeEntrySchema = z.object({
   title: z.string().min(1),
   type: knowledgeTypeSchema,
   content: z.string().min(1),
+  summary: z.string().nullable().optional(),
   scope: knowledgeScopeSchema,
   repo: z.string().nullable(),
   domain: z.string().nullable(),
@@ -96,6 +97,7 @@ export const storeKnowledgeInputSchema = z
     title: z.string().min(1),
     type: knowledgeTypeSchema,
     content: z.string().min(1),
+    summary: z.string().max(300).optional(),
     scope: knowledgeScopeSchema.default("global"),
     repo: z.string().trim().min(1).nullable().optional(),
     domain: z.string().trim().min(1).nullable().optional(),
@@ -122,12 +124,17 @@ export const storeKnowledgeInputSchema = z
     }
   });
 
-export const knowledgeResultSchema = knowledgeEntrySchema.extend({
-  sourceId: z.string().min(1),
-  sourceName: z.string().min(1),
-  sourceKind: sourceKindSchema,
-  score: z.number().min(0).max(1),
-});
+export const knowledgeResultSchema = knowledgeEntrySchema
+  .omit({ content: true })
+  .extend({
+    // content is omitted from Phase 1 results; call get_knowledge for full content
+    content: z.string().optional(),
+    sourceId: z.string().min(1),
+    sourceName: z.string().min(1),
+    sourceKind: sourceKindSchema,
+    score: z.number().min(0).max(1),
+    matchedOn: z.enum(["semantic", "text"]).optional(),
+  });
 
 export const resolveSourceActionInputSchema = z.object({
   action: z.enum(["read", "write"]),

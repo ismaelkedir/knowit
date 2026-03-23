@@ -95,4 +95,10 @@ export class SqliteMemorySource implements MemorySourceProvider {
   async listKnowledge(filters: KnowledgeListFilters): Promise<KnowledgeEntry[]> {
     return this.repository.listEntries(filters);
   }
+
+  async getKnowledge(ids: string[]): Promise<KnowledgeEntry[]> {
+    return ids
+      .map((id) => this.repository.getEntryById(id))
+      .filter((e): e is KnowledgeEntry => e !== null);
+  }
 }
