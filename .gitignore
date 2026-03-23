@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .env
+.env.local
+.env.*.local
 .claude/
 .knowit/
 knowit.db
 knowit.db-shm
 knowit.db-wal
+*.tsbuildinfo
+.DS_Store
