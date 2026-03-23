@@ -30,6 +30,12 @@ export const sourceShowCommand = (id: string): void => {
     return;
   }
 
+  if (source.config.mode === "cloud") {
+    console.log("Mode: cloud");
+    console.log(`API URL: ${source.config.apiUrl}`);
+    return;
+  }
+
   console.log(`Mode: route`);
   console.log(`Provider: ${source.config.provider}`);
   console.log(`Provider MCP: ${source.config.mcpServerName}`);
