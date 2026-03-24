@@ -13,6 +13,8 @@ import { sourceAddMcpCommand } from "./commands/sourceAddMcp.js";
 import { sourceConnectCommand } from "./commands/sourceConnect.js";
 import { sourceListCommand } from "./commands/sourceList.js";
 import { sourceShowCommand } from "./commands/sourceShow.js";
+import { importMdCommand } from "./commands/importMd.js";
+import { migrateCommand } from "./commands/migrate.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerLogoutCommand } from "./commands/logout.js";
 import { registerWhoamiCommand } from "./commands/whoami.js";
@@ -148,6 +150,25 @@ sourceProgram
   .option("--resolve-tool <resolveTool>", "Remote tool name used to resolve context")
   .option("--default", "Mark this source as the default")
   .action(sourceAddMcpCommand);
+
+program
+  .command("import-md")
+  .description("Import markdown knowledge files into a Knowit source")
+  .option("--source <source>", "Target source ID", "local")
+  .option("--path <path...>", "Specific markdown files to import (auto-detects if omitted)")
+  .option("--repo <repo>", "Repository name to tag entries with (defaults to current directory name)")
+  .option("--yes", "Skip confirmation prompt")
+  .option("--dry-run", "Preview files without importing")
+  .action(importMdCommand);
+
+program
+  .command("migrate")
+  .description("Migrate knowledge entries from one source to another")
+  .option("--from <source>", "Source to migrate from", "local")
+  .option("--to <source>", "Destination source to migrate to", "cloud")
+  .option("--yes", "Skip confirmation prompt")
+  .option("--dry-run", "Preview entries without migrating")
+  .action(migrateCommand);
 
 registerLoginCommand(program);
 registerLogoutCommand(program);

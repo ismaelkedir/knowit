@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { saveCredentials } from "../../utils/credentials.js";
 import { applyInstallPlan, createInstallPlan } from "../../install/installer.js";
 
-const DEFAULT_CLOUD_API_URL = "https://useknowit.dev";
+const DEFAULT_CLOUD_API_URL = "https://www.useknowit.dev";
 
 interface LoginOptions {
   token?: string;
@@ -14,13 +14,13 @@ export function registerLoginCommand(program: Command): void {
     .command("login")
     .description("Connect the Knowit CLI to your cloud account")
     .option("--token <token>", "Your Knowit Cloud API token (ki_live_...)")
-    .option("--api-url <url>", "Cloud API URL (default: https://useknowit.dev)")
+    .option("--api-url <url>", "Cloud API URL (default: https://www.useknowit.dev)")
     .action(async (options: LoginOptions) => {
       const token = options.token ?? process.env.KNOWIT_CLOUD_TOKEN;
       const apiUrl = options.apiUrl ?? process.env.KNOWIT_CLOUD_API_URL ?? DEFAULT_CLOUD_API_URL;
 
       if (!token) {
-        console.error("Error: --token is required. Get a token at https://useknowit.dev/dashboard/tokens");
+        console.error("Error: --token is required. Get a token at https://www.useknowit.dev/dashboard/tokens");
         process.exit(1);
       }
 

@@ -278,7 +278,7 @@ export const mergeInstructionFile = (
   return `${existingContents.trimEnd()}\n\n${block}\n`;
 };
 
-const buildMarkdownImportPlan = (filePath: string, cwd: string): MarkdownImportPlan => {
+export const buildMarkdownImportPlan = (filePath: string, cwd: string): MarkdownImportPlan => {
   const contents = fs.readFileSync(filePath, "utf8");
   const title = inferTitleFromMarkdown(filePath, contents);
   const type = inferKnowledgeType(path.basename(filePath));

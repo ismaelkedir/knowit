@@ -16,14 +16,17 @@ export function registerWhoamiCommand(program: Command): void {
         return;
       }
 
-      const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? creds?.cloudApiUrl ?? "https://useknowit.dev";
+      const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? creds?.cloudApiUrl ?? "https://www.useknowit.dev";
 
       try {
         const res = await fetch(`${apiUrl}/api/trpc/auth.me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
 
         const data = (await res.json()) as {
           result?: { data?: { json?: { email: string; plan: string } } };

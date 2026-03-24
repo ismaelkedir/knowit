@@ -63,7 +63,7 @@ export class MemoryService {
     this.cloudSourceBootstrapped = true;
 
     const token = process.env.KNOWIT_CLOUD_TOKEN;
-    const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? "https://useknowit.dev";
+    const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? "https://www.useknowit.dev";
 
     if (!token) {
       // Fall back to credentials file
@@ -77,9 +77,6 @@ export class MemoryService {
   }
 
   private upsertCloudSource(token: string, apiUrl: string): void {
-    const existing = this.sourceRepository.getSourceById("cloud");
-    if (existing) return;
-
     this.sourceRepository.upsertSyntheticSource({
       id: "cloud",
       name: "Knowit Cloud",
@@ -232,6 +229,7 @@ export class MemoryService {
       source.kind === "route"
         ? await this.searchKnowledge({
             query: lookupText,
+            source: "local",
             repo: parsedInput.repo,
             domain: parsedInput.domain,
             limit: 5,
