@@ -71,7 +71,7 @@ export const knowledgeListFiltersSchema = z.object({
   type: knowledgeTypeSchema.optional(),
   repo: z.string().trim().min(1).optional(),
   domain: z.string().trim().min(1).optional(),
-  limit: z.number().int().positive().max(100).default(50),
+  limit: z.number().int().positive().max(10000).default(50),
 });
 
 export const knowledgeSearchFiltersSchema = z.object({
