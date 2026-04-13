@@ -27,7 +27,7 @@ const program = new Command();
 program
   .name("knowit")
   .description("Shared team memory for AI coding agents")
-  .version("0.2.2");
+  .version("0.2.3");
 
 program
   .command("serve")
