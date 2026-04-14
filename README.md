@@ -41,6 +41,8 @@ knowit install
 - connect a preferred source
 - optionally migrate architecture or ADR-style markdown into Knowit
 
+This repository intentionally keeps a checked-in `.mcp.json` so Knowit can use itself while developing Knowit. For normal consumer projects, prefer generating MCP config through `knowit install`.
+
 ### 2. Tell your agent to use it
 
 If you are not using the installer-managed instructions, add this to `AGENTS.md` or `CLAUDE.md`:
@@ -199,6 +201,9 @@ Issues, README improvements, bug reports, feature requests, and pull requests ar
 - Repo: [github.com/ismaelkedir/knowit](https://github.com/ismaelkedir/knowit)
 - Issues: [github.com/ismaelkedir/knowit/issues](https://github.com/ismaelkedir/knowit/issues)
 - Discussions: [github.com/ismaelkedir/knowit/discussions](https://github.com/ismaelkedir/knowit/discussions)
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security policy: [SECURITY.md](SECURITY.md)
 
 If you are trying Knowit in a real project, feedback about agent workflows, missing MCP tools, and setup friction is especially useful.
 

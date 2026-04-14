@@ -9,6 +9,8 @@
   },
   "files": [
     "dist/",
+    "!dist/tests/",
+    "!dist/tests/**",
     "README.md",
     "LICENSE"
   ],
@@ -17,6 +19,7 @@
     "start": "node dist/server/mcpServer.js",
     "cli": "node dist/cli/index.js",
     "test": "npm run build && node --test dist/tests/**/*.test.js",
+    "pack:smoke": "npm pack --dry-run --cache /tmp/knowit-npm-cache",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
