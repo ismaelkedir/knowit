@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import dotenv from "dotenv";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { MemoryService } from "../services/memoryService.js";
 import { registerResources } from "./resources.js";
@@ -10,6 +11,9 @@ import { logger } from "../utils/logger.js";
 
 dotenv.config();
 
+const require = createRequire(import.meta.url);
+const packageJson = require("../../package.json") as { version: string };
+
 export const createMcpServer = (): McpServer => {
   const memoryService = new MemoryService();
   memoryService.init();
@@ -18,7 +22,7 @@ export const createMcpServer = (): McpServer => {
 
   const server = new McpServer({
     name: "knowit",
-    version: "0.2.2",
+    version: packageJson.version,
   });
 
   registerTools(server, memoryService, instructionsInstalled);
