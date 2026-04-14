@@ -10,6 +10,25 @@ Knowit is an MCP server and CLI that gives Claude Code, Codex, and other MCP-com
 
 Instead of re-explaining architecture rules, naming conventions, and past decisions every session, you store them once and let your agent retrieve them when needed.
 
+## Contents
+
+- [Why Knowit](#why-knowit)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Common Use Cases](#common-use-cases)
+- [CLI](#cli)
+- [MCP Tools](#mcp-tools)
+- [Knowledge Model](#knowledge-model)
+- [Shared Team Memory](#shared-team-memory)
+- [Semantic Search](#semantic-search)
+- [Notion Integration](#notion-integration)
+- [Configuration](#configuration)
+- [Automatic Update Notifications](#automatic-update-notifications)
+- [Public Launch Note](#public-launch-note)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Why Knowit
 
 - Keep durable engineering memory out of scattered repo markdown files.
@@ -24,6 +43,8 @@ npm install -g knowit
 ```
 
 Requires Node.js 20+.
+
+Knowit's CLI also checks for newer published versions and shows a non-blocking update notice in interactive terminal sessions.
 
 ## Quick Start
 
@@ -189,6 +210,14 @@ knowit source connect notion
 | `project` | `.knowit/knowit.db` inside the current repo |
 | `global` | `~/.knowit/knowit.db` |
 | `custom` | Value of `KNOWIT_DB_PATH` |
+
+## Automatic Update Notifications
+
+Knowit's interactive CLI commands use [`update-notifier`](https://www.npmjs.com/package/update-notifier) to let users know when a newer npm release is available.
+
+- Notifications are skipped for `knowit serve` so MCP stdio traffic stays clean.
+- Notifications are also skipped in CI, tests, and non-interactive terminal sessions.
+- Users can disable them with `NO_UPDATE_NOTIFIER=1` or by passing `--no-update-notifier`.
 
 ## Public Launch Note
 

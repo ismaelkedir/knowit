@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import dotenv from "dotenv";
+import { createRequire } from "node:module";
 import { addCommand } from "./commands/add.js";
 import { installCommand } from "./commands/install.js";
 import { initCommand } from "./commands/init.js";
@@ -18,16 +19,19 @@ import { migrateCommand } from "./commands/migrate.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerLogoutCommand } from "./commands/logout.js";
 import { registerWhoamiCommand } from "./commands/whoami.js";
+import { notifyIfUpdateAvailable } from "./updateNotifier.js";
 import { startMcpServer } from "../server/mcpServer.js";
 
 dotenv.config();
 
+const require = createRequire(import.meta.url);
+const packageJson = require("../../package.json") as { version: string };
 const program = new Command();
 
 program
   .name("knowit")
   .description("Shared team memory for AI coding agents")
-  .version("0.2.3");
+  .version(packageJson.version);
 
 program
   .command("serve")
@@ -173,6 +177,8 @@ program
 registerLoginCommand(program);
 registerLogoutCommand(program);
 registerWhoamiCommand(program);
+
+notifyIfUpdateAvailable(process.argv.slice(2));
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "Unknown CLI error";
