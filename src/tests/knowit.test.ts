@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import { getDatabasePath, getStorageScope, initializeDatabase, resetDatabase } from "../db/database.js";
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
+import { shouldCheckForUpdates } from "../cli/updateNotifier.js";
 import { SqliteMemorySource } from "../sources/sqliteSource.js";
 import { MemoryService } from "../services/memoryService.js";
 import { storeKnowledgeInputSchema } from "../types/knowledge.js";
@@ -240,6 +241,12 @@ test("local sqlite source stores and retrieves knowledge without embeddings", as
   } finally {
     cleanup();
   }
+});
+
+test("CLI update checks stay off for stdio server mode and passive flags", () => {
+  assert.equal(shouldCheckForUpdates(["serve"]), false);
+  assert.equal(shouldCheckForUpdates(["--version"]), false);
+  assert.equal(shouldCheckForUpdates(["search", "retry state"]), true);
 });
 
 test("database path defaults to a project-local .knowit directory", () => {
