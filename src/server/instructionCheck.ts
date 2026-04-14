@@ -4,18 +4,18 @@ import path from "node:path";
 
 const KNOWIT_MARKER = "<!-- knowit:start -->";
 
-const CANDIDATE_PATHS = (cwd: string): string[] => [
+const CANDIDATE_PATHS = (cwd: string, includeGlobal: boolean): string[] => [
   path.join(cwd, "CLAUDE.md"),
   path.join(cwd, ".claude", "CLAUDE.md"),
-  path.join(os.homedir(), ".claude", "CLAUDE.md"),
+  ...(includeGlobal ? [path.join(os.homedir(), ".claude", "CLAUDE.md")] : []),
   path.join(cwd, "AGENTS.md"),
   path.join(cwd, ".codex", "AGENTS.md"),
-  path.join(os.homedir(), "AGENTS.md"),
-  path.join(os.homedir(), ".codex", "AGENTS.md"),
+  ...(includeGlobal ? [path.join(os.homedir(), "AGENTS.md"), path.join(os.homedir(), ".codex", "AGENTS.md")] : []),
 ];
 
 export function checkInstructionsInstalled(cwd: string = process.cwd()): boolean {
-  return CANDIDATE_PATHS(cwd).some((filePath) => {
+  const includeGlobal = cwd === process.cwd();
+  return CANDIDATE_PATHS(cwd, includeGlobal).some((filePath) => {
     try {
       return fs.readFileSync(filePath, "utf8").includes(KNOWIT_MARKER);
     } catch {

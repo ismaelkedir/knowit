@@ -69,24 +69,25 @@ export class MemoryService {
 
     const token = process.env.KNOWIT_CLOUD_TOKEN;
     const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? "https://www.useknowit.dev";
+    const currentDefault = this.sourceRepository.getDefaultSource();
 
     if (!token) {
       // Fall back to credentials file
       const creds = loadCredentials();
       if (!creds) return;
-      this.upsertCloudSource(creds.token, creds.cloudApiUrl);
+      this.upsertCloudSource(creds.token, creds.cloudApiUrl, currentDefault.id === "cloud");
       return;
     }
 
-    this.upsertCloudSource(token, apiUrl);
+    this.upsertCloudSource(token, apiUrl, currentDefault.id === "local" || currentDefault.id === "cloud");
   }
 
-  private upsertCloudSource(token: string, apiUrl: string): void {
+  private upsertCloudSource(token: string, apiUrl: string, isDefault: boolean): void {
     this.sourceRepository.upsertSyntheticSource({
       id: "cloud",
       name: "Knowit Cloud",
       kind: "cloud",
-      isDefault: true,
+      isDefault,
       config: { mode: "cloud", apiUrl, token },
     });
   }
