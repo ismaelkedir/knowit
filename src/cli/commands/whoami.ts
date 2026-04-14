@@ -1,11 +1,17 @@
 import { Command } from "commander";
 import { loadCredentials } from "../../utils/credentials.js";
+import { KNOWIT_CLOUD_DISABLED_MESSAGE, isKnowitCloudEnabled } from "../../utils/cloudAvailability.js";
 
 export function registerWhoamiCommand(program: Command): void {
   program
     .command("whoami")
     .description("Show the currently logged-in cloud account")
     .action(async () => {
+      if (!isKnowitCloudEnabled()) {
+        console.log(KNOWIT_CLOUD_DISABLED_MESSAGE);
+        return;
+      }
+
       const envToken = process.env.KNOWIT_CLOUD_TOKEN;
       const creds = loadCredentials();
       const token = envToken ?? creds?.token;

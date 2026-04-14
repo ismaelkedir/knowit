@@ -1,4 +1,5 @@
 import { MemoryService } from "../../services/memoryService.js";
+import { KNOWIT_CLOUD_DISABLED_MESSAGE, isKnowitCloudEnabled } from "../../utils/cloudAvailability.js";
 
 interface MigrateCommandOptions {
   from: string;
@@ -8,6 +9,11 @@ interface MigrateCommandOptions {
 }
 
 export const migrateCommand = async (options: MigrateCommandOptions): Promise<void> => {
+  if ((options.from === "cloud" || options.to === "cloud") && !isKnowitCloudEnabled()) {
+    console.error(`Error: ${KNOWIT_CLOUD_DISABLED_MESSAGE}`);
+    return;
+  }
+
   const service = new MemoryService();
   service.init();
 
