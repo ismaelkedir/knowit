@@ -1,6 +1,7 @@
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
 import { loadCredentials } from "../utils/credentials.js";
+import { isKnowitCloudEnabled } from "../utils/cloudAvailability.js";
 import {
   knowledgeListFiltersSchema,
   knowledgeSearchFiltersSchema,
@@ -61,6 +62,10 @@ export class MemoryService {
   private bootstrapCloudSource(): void {
     if (this.cloudSourceBootstrapped) return;
     this.cloudSourceBootstrapped = true;
+
+    if (!isKnowitCloudEnabled()) {
+      return;
+    }
 
     const token = process.env.KNOWIT_CLOUD_TOKEN;
     const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? "https://www.useknowit.dev";

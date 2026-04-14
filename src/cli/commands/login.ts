@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { saveCredentials } from "../../utils/credentials.js";
-import { applyInstallPlan, createInstallPlan } from "../../install/installer.js";
+import { KNOWIT_CLOUD_DISABLED_MESSAGE, isKnowitCloudEnabled } from "../../utils/cloudAvailability.js";
 
 const DEFAULT_CLOUD_API_URL = "https://www.useknowit.dev";
 
@@ -16,6 +16,11 @@ export function registerLoginCommand(program: Command): void {
     .option("--token <token>", "Your Knowit Cloud API token (ki_live_...)")
     .option("--api-url <url>", "Cloud API URL (default: https://www.useknowit.dev)")
     .action(async (options: LoginOptions) => {
+      if (!isKnowitCloudEnabled()) {
+        console.error(`Error: ${KNOWIT_CLOUD_DISABLED_MESSAGE}`);
+        process.exit(1);
+      }
+
       const token = options.token ?? process.env.KNOWIT_CLOUD_TOKEN;
       const apiUrl = options.apiUrl ?? process.env.KNOWIT_CLOUD_API_URL ?? DEFAULT_CLOUD_API_URL;
 
