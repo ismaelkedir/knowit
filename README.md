@@ -1,6 +1,6 @@
 # Knowit
 
-Persistent memory for AI coding agents.
+Structured memory for AI coding agents.
 
 [![npm version](https://img.shields.io/npm/v/knowit)](https://www.npmjs.com/package/knowit)
 [![license](https://img.shields.io/github/license/ismaelkedir/knowit)](LICENSE)
@@ -8,11 +8,14 @@ Persistent memory for AI coding agents.
 
 Knowit is an MCP server and CLI that gives Claude Code, Codex, and other MCP-compatible agents a durable, queryable memory layer for your project.
 
-Instead of re-explaining architecture rules, naming conventions, and past decisions every session, you store them once and let your agent retrieve them when needed.
+It stores engineering knowledge as structured memory that agents can retrieve before they plan or edit code.
+
+Instead of re-explaining architecture rules, naming conventions, and past decisions every session, you store them once and let your agent retrieve the relevant context when needed.
 
 ## Contents
 
 - [Why Knowit](#why-knowit)
+- [Why Structured Memory](#why-structured-memory)
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
@@ -31,10 +34,29 @@ Instead of re-explaining architecture rules, naming conventions, and past decisi
 
 ## Why Knowit
 
-- Keep durable engineering memory out of scattered repo markdown files.
 - Give every agent session the same project context before it starts changing code.
+- Store engineering knowledge in a structured, queryable memory layer instead of scattered prompts and notes.
 - Share conventions and decisions across teammates with one local or shared SQLite database.
+- Work across Claude Code, Codex, and other MCP-compatible agents without tying memory to one tool.
 - Store structured knowledge: rules, architecture, patterns, decisions, conventions, and notes.
+
+## Why Structured Memory
+
+Knowit is designed for operational engineering memory: the durable context agents need while doing code work.
+
+That means memory is stored with structure such as:
+
+- entry type: `rule`, `architecture`, `pattern`, `decision`, `convention`, `note`
+- scope: `global`, `team`, `repo`, `domain`
+- metadata: tags, URLs, confidence, and source information
+
+This makes it easier for agents to retrieve only the context that matters for the current task, such as:
+
+- repo-specific architecture rules before implementing a feature
+- domain-specific conventions before refactoring a subsystem
+- team-wide decisions before introducing a new pattern
+
+The default local storage is SQLite, which gives Knowit a simple local-first setup while keeping memory queryable, shareable, and independent from any single model vendor or editor.
 
 ## Install
 
@@ -97,11 +119,18 @@ Agents interact with Knowit through MCP tools:
 
 That keeps source code in the repo and long-lived project memory in Knowit.
 
+In practice, Knowit is a layer for execution context:
+
+- canonical source code stays in the repository
+- durable engineering memory stays in Knowit
+- external canonical docs can stay in tools like Notion, with Knowit routing agents to the right source when needed
+
 ## Common Use Cases
 
 - Store coding rules that agents must follow.
 - Preserve architecture decisions and tradeoffs.
 - Capture reusable implementation patterns.
+- Keep durable memory out of scattered prompts, session history, and ad hoc note files.
 - Replace repo-local memory sprawl such as extra `ARCHITECTURE.md`, ADR, and process notes.
 - Share team conventions through one shared SQLite database path.
 
