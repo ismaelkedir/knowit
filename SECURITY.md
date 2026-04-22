@@ -16,3 +16,13 @@ Instead, report them privately to the project maintainer using the security cont
 - any suggested remediation
 
 You should receive an acknowledgement after the report is reviewed.
+
+## Credential Storage
+
+`knowit login` stores cloud credentials at `~/.knowit/credentials.json`.
+
+- The file is written with `0o600` permissions so only the current user can read and write it on correctly configured systems.
+- The credentials are stored as plain JSON, not in the OS keychain.
+- On shared machines or systems with weak home-directory isolation, treat this as sensitive local secret material and prefer short-lived accounts or explicit logout when appropriate.
+
+An optional OS keychain-backed storage mode is a reasonable future enhancement, but it is not implemented today.

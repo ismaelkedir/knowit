@@ -243,6 +243,124 @@ test("local sqlite source stores and retrieves knowledge without embeddings", as
   }
 });
 
+test("initializeDatabase adds the summary column for legacy databases", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-legacy-"));
+  const database = new Database(path.join(tempDir, "knowit.db"));
+
+  try {
+    database.exec(`
+      CREATE TABLE knowledge_entries (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        repo TEXT,
+        domain TEXT,
+        tags TEXT NOT NULL DEFAULT '',
+        embedding TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 1
+      );
+
+      CREATE TABLE knowledge_sources (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,
+        config TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    initializeDatabase(database);
+
+    const columns = database
+      .pragma("table_info(knowledge_entries)", { simple: false }) as Array<{ name: string }>;
+
+    assert.ok(columns.some((column) => column.name === "summary"));
+  } finally {
+    database.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("summary is persisted on create and update", async () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, failingEmbeddingGenerator);
+
+    const first = await source.storeKnowledge({
+      type: "rule",
+      title: "Summary persistence",
+      content: "Initial content.",
+      summary: "Initial summary.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["summary"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    const second = await source.storeKnowledge({
+      type: "rule",
+      title: "Summary persistence",
+      content: "Updated content.",
+      summary: "Updated summary.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["summary", "updated"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    assert.equal(first.summary, "Initial summary.");
+    assert.equal(second.summary, "Updated summary.");
+
+    const stored = knowledgeRepository.getEntryById(second.id);
+    assert.equal(stored?.summary, "Updated summary.");
+  } finally {
+    cleanup();
+  }
+});
+
+test("local sqlite source retries transient embedding failures before storing", async () => {
+  const { database, cleanup } = createTestDatabase();
+  let attempts = 0;
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("temporary upstream failure");
+      }
+
+      return [0.1, 0.2, 0.3];
+    });
+
+    const entry = await source.storeKnowledge({
+      type: "note",
+      title: "Retry embeddings",
+      content: "Should survive one transient failure.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["retry"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(entry.embedding, [0.1, 0.2, 0.3]);
+  } finally {
+    cleanup();
+  }
+});
+
 test("CLI update checks stay off for stdio server mode and passive flags", () => {
   assert.equal(shouldCheckForUpdates(["serve"]), false);
   assert.equal(shouldCheckForUpdates(["--version"]), false);
@@ -556,5 +674,38 @@ test("direct read APIs fall back to local storage when the default source is rou
       process.env.KNOWIT_DB_PATH = originalPath;
     }
     cleanup();
+  }
+});
+
+test("memory services with injected databases do not share state", async () => {
+  const firstDb = createTestDatabase();
+  const secondDb = createTestDatabase();
+
+  try {
+    const firstService = new MemoryService({ database: firstDb.database });
+    const secondService = new MemoryService({ database: secondDb.database });
+
+    firstService.init();
+    secondService.init();
+
+    await firstService.storeKnowledge({
+      title: "Only in first database",
+      type: "note",
+      content: "This entry should not leak across service instances.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["di"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    const firstEntries = await firstService.listKnowledge({ source: "local", repo: "knowit", limit: 10 });
+    const secondEntries = await secondService.listKnowledge({ source: "local", repo: "knowit", limit: 10 });
+
+    assert.equal(firstEntries.length, 1);
+    assert.equal(secondEntries.length, 0);
+  } finally {
+    firstDb.cleanup();
+    secondDb.cleanup();
   }
 });

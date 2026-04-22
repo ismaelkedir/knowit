@@ -9,18 +9,69 @@ import type {
 } from "../types/knowledge.js";
 import type { KnowledgeSource } from "../types/source.js";
 import type { MemorySourceProvider } from "./base.js";
+import { logger } from "../utils/logger.js";
 
 type EmbeddingGenerator = (text: string) => Promise<number[]>;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const isRetryableEmbeddingError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+  if (message.includes("openai_api_key is required")) {
+    return false;
+  }
+
+  return true;
+};
+
+const isMissingApiKeyError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("openai_api_key is required");
+};
 
 const tryGenerateEmbedding = async (
   embeddingGenerator: EmbeddingGenerator,
   text: string,
+  purpose: "store" | "search" | "resolve",
 ): Promise<number[] | null> => {
-  try {
-    return await embeddingGenerator(text);
-  } catch {
-    return null;
+  const maxAttempts = 2;
+  let attemptsMade = 0;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    attemptsMade = attempt;
+    try {
+      return await embeddingGenerator(text);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown embedding error";
+      if (attempt < maxAttempts && isRetryableEmbeddingError(error)) {
+        logger.warn(`Embedding generation failed on attempt ${attempt}; retrying`, {
+          purpose,
+          attempt,
+          error: message,
+        });
+        await sleep(100 * 2 ** (attempt - 1));
+        continue;
+      }
+
+      const meta = {
+        purpose,
+        attempts: attemptsMade,
+        error: message,
+      };
+
+      if (isMissingApiKeyError(error)) {
+        logger.debug("Embedding generation unavailable; using non-embedding path", meta);
+      } else {
+        logger.warn("Embedding generation failed; falling back to non-embedding path", meta);
+      }
+    }
   }
+
+  return null;
 };
 
 const normalizeLocalResult = (
@@ -56,6 +107,7 @@ export class SqliteMemorySource implements MemorySourceProvider {
     const embedding = await tryGenerateEmbedding(
       this.embeddingGenerator,
       buildEmbeddingInput(input.title, input.content, input.tags),
+      "store",
     );
 
     return this.repository.createEntry({
@@ -72,7 +124,7 @@ export class SqliteMemorySource implements MemorySourceProvider {
     domain?: string;
     limit: number;
   }): Promise<KnowledgeResult[]> {
-    const embedding = await tryGenerateEmbedding(this.embeddingGenerator, input.query);
+    const embedding = await tryGenerateEmbedding(this.embeddingGenerator, input.query, "search");
     const results = embedding
       ? this.repository.searchEntries(embedding, {
           ...input,
@@ -84,7 +136,7 @@ export class SqliteMemorySource implements MemorySourceProvider {
   }
 
   async resolveContext(input: ResolveContextInput): Promise<KnowledgeResult[]> {
-    const embedding = await tryGenerateEmbedding(this.embeddingGenerator, input.task);
+    const embedding = await tryGenerateEmbedding(this.embeddingGenerator, input.task, "resolve");
     const results = embedding
       ? this.repository.resolveContext(embedding, input)
       : this.repository.resolveContextByText(input);

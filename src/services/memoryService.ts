@@ -23,6 +23,7 @@ import type {
   KnowledgeSource,
 } from "../types/source.js";
 import { SourceRegistry } from "../sources/sourceRegistry.js";
+import type Database from "better-sqlite3";
 
 export interface KnowledgeStats {
   totalEntries: number;
@@ -44,10 +45,18 @@ export class MemoryService {
 
   private readonly sourceRegistry: SourceRegistry;
 
-  constructor() {
-    this.knowledgeRepository = new KnowledgeRepository();
-    this.sourceRepository = new SourceRepository();
-    this.sourceRegistry = new SourceRegistry(this.knowledgeRepository);
+  constructor(options: {
+    database?: Database.Database;
+    knowledgeRepository?: KnowledgeRepository;
+    sourceRepository?: SourceRepository;
+    sourceRegistry?: SourceRegistry;
+  } = {}) {
+    const knowledgeRepository = options.knowledgeRepository ?? new KnowledgeRepository(options.database);
+    const sourceRepository = options.sourceRepository ?? new SourceRepository(options.database);
+
+    this.knowledgeRepository = knowledgeRepository;
+    this.sourceRepository = sourceRepository;
+    this.sourceRegistry = options.sourceRegistry ?? new SourceRegistry(knowledgeRepository);
   }
 
   private cloudSourceBootstrapped = false;
@@ -75,11 +84,17 @@ export class MemoryService {
       // Fall back to credentials file
       const creds = loadCredentials();
       if (!creds) return;
-      this.upsertCloudSource(creds.token, creds.cloudApiUrl, currentDefault.id === "cloud");
+      this.upsertCloudSource(creds.token, creds.cloudApiUrl, false);
+      if (currentDefault.id === "cloud") {
+        this.sourceRepository.setDefaultSource("local");
+      }
       return;
     }
 
-    this.upsertCloudSource(token, apiUrl, currentDefault.id === "local" || currentDefault.id === "cloud");
+    this.upsertCloudSource(token, apiUrl, false);
+    if (currentDefault.id === "cloud") {
+      this.sourceRepository.setDefaultSource("local");
+    }
   }
 
   private upsertCloudSource(token: string, apiUrl: string, isDefault: boolean): void {
