@@ -1,4 +1,6 @@
 import { Command } from "commander";
+import { getStorageScope } from "../../db/database.js";
+import { MemoryService } from "../../services/memoryService.js";
 import { saveCredentials } from "../../utils/credentials.js";
 import { KNOWIT_CLOUD_DISABLED_MESSAGE, isKnowitCloudEnabled } from "../../utils/cloudAvailability.js";
 
@@ -7,7 +9,51 @@ const DEFAULT_CLOUD_API_URL = "https://www.useknowit.dev";
 interface LoginOptions {
   token?: string;
   apiUrl?: string;
+  defaultSource?: string;
 }
+
+const describeStorageScope = (): string => {
+  const storageScope = getStorageScope();
+  if (storageScope === "project" || storageScope === "global") {
+    return storageScope;
+  }
+
+  return "custom";
+};
+
+const resolveDefaultToCloud = async (options: LoginOptions): Promise<boolean> => {
+  if (options.defaultSource) {
+    if (options.defaultSource === "cloud") {
+      return true;
+    }
+
+    if (options.defaultSource === "keep" || options.defaultSource === "local") {
+      return false;
+    }
+
+    throw new Error("default-source must be one of: keep, local, cloud");
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return false;
+  }
+
+  const scopeLabel = describeStorageScope();
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+  try {
+    const answer = (
+      await rl.question(`Make Knowit Cloud the default source for this ${scopeLabel} setup? [y/N] `)
+    )
+      .trim()
+      .toLowerCase();
+
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+};
 
 export function registerLoginCommand(program: Command): void {
   program
@@ -15,6 +61,7 @@ export function registerLoginCommand(program: Command): void {
     .description("Connect the Knowit CLI to your cloud account")
     .option("--token <token>", "Your Knowit Cloud API token (ki_live_...)")
     .option("--api-url <url>", "Cloud API URL (default: https://www.useknowit.dev)")
+    .option("--default-source <defaultSource>", "Default source after login: keep, local, or cloud")
     .action(async (options: LoginOptions) => {
       if (!isKnowitCloudEnabled()) {
         console.error(`Error: ${KNOWIT_CLOUD_DISABLED_MESSAGE}`);
@@ -69,12 +116,15 @@ export function registerLoginCommand(program: Command): void {
         process.exit(1);
       }
 
+      const defaultToCloud = await resolveDefaultToCloud(options);
+
       // Save credentials
       saveCredentials({
         token,
         accountId,
         plan: plan as "pro" | "team",
         cloudApiUrl: apiUrl,
+        defaultToCloud,
       });
 
       // Patch MCP client configs to inject KNOWIT_CLOUD_TOKEN
@@ -84,8 +134,20 @@ export function registerLoginCommand(program: Command): void {
         // Non-fatal — credentials file will be picked up as fallback
       }
 
+      const service = new MemoryService();
+      service.init();
+      if (defaultToCloud) {
+        service.setDefaultSource("cloud");
+      } else {
+        service.setDefaultSource("local");
+      }
+
       console.log(`\nLogged in as ${email} (${plan} plan)`);
-      console.log("Your agent sessions will now read and write to Knowit Cloud.");
+      if (defaultToCloud) {
+        console.log(`Knowit Cloud is now the default source for this ${describeStorageScope()} setup.`);
+      } else {
+        console.log("Knowit Cloud is available as an optional source. Your default source remains local.");
+      }
       console.log("\nTo verify: knowit whoami");
     });
 }
@@ -108,8 +170,6 @@ async function patchMcpConfigs(token: string): Promise<void> {
 
   const env = (knowit.env as Record<string, string> | undefined) ?? {};
   env["KNOWIT_CLOUD_TOKEN"] = token;
-  // Remove local DB env if switching to cloud
-  delete env["KNOWIT_DB_PATH"];
   knowit.env = env;
   mcpServers["knowit"] = knowit;
   config.mcpServers = mcpServers;

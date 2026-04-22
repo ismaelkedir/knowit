@@ -1,3 +1,4 @@
+import { MemoryService } from "../../services/memoryService.js";
 import { Command } from "commander";
 import { clearCredentials, loadCredentials } from "../../utils/credentials.js";
 
@@ -14,6 +15,9 @@ export function registerLogoutCommand(program: Command): void {
 
       clearCredentials();
 
+      const service = new MemoryService();
+      service.disconnectCloudSource();
+
       // Remove KNOWIT_CLOUD_TOKEN from Claude config if present
       try {
         await removeMcpToken();
@@ -22,7 +26,7 @@ export function registerLogoutCommand(program: Command): void {
       }
 
       console.log("Logged out from Knowit Cloud.");
-      console.log("Your agent sessions will now use local SQLite storage.");
+      console.log("Your default source is now local SQLite.");
     });
 }
 

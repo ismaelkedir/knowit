@@ -7,6 +7,7 @@ export interface KnowitCredentials {
   accountId: string;
   plan: "pro" | "team";
   cloudApiUrl: string;
+  defaultToCloud?: boolean;
 }
 
 const credentialsPath = path.join(os.homedir(), ".knowit", "credentials.json");

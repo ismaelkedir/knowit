@@ -78,22 +78,33 @@ export class MemoryService {
 
     const token = process.env.KNOWIT_CLOUD_TOKEN;
     const apiUrl = process.env.KNOWIT_CLOUD_API_URL ?? "https://www.useknowit.dev";
+    const preferCloudFromEnv = process.env.KNOWIT_CLOUD_DEFAULT === "true";
     const currentDefault = this.sourceRepository.getDefaultSource();
+    const localSource = this.sourceRepository.getSourceById("local");
 
     if (!token) {
       // Fall back to credentials file
       const creds = loadCredentials();
-      if (!creds) return;
-      this.upsertCloudSource(creds.token, creds.cloudApiUrl, false);
-      if (currentDefault.id === "cloud") {
-        this.sourceRepository.setDefaultSource("local");
+      if (!creds) {
+        if (currentDefault.id === "cloud" && localSource) {
+          this.sourceRepository.setDefaultSource(localSource.id);
+        }
+        this.sourceRepository.removeSource("cloud");
+        return;
+      }
+
+      const preferCloud = preferCloudFromEnv || creds.defaultToCloud === true;
+      this.upsertCloudSource(creds.token, creds.cloudApiUrl, preferCloud);
+      if (!preferCloud && currentDefault.id === "cloud" && localSource) {
+        this.sourceRepository.setDefaultSource(localSource.id);
       }
       return;
     }
 
-    this.upsertCloudSource(token, apiUrl, false);
-    if (currentDefault.id === "cloud") {
-      this.sourceRepository.setDefaultSource("local");
+    const preferCloud = preferCloudFromEnv;
+    this.upsertCloudSource(token, apiUrl, preferCloud);
+    if (!preferCloud && currentDefault.id === "cloud" && localSource) {
+      this.sourceRepository.setDefaultSource(localSource.id);
     }
   }
 
@@ -120,6 +131,24 @@ export class MemoryService {
   connectKnownSource(input: ConnectKnownSourceInput): KnowledgeSource {
     this.init();
     return this.sourceRepository.connectKnownSource(input);
+  }
+
+  setDefaultSource(id: string): void {
+    this.init();
+    const source = this.sourceRepository.getSourceById(id);
+    if (!source) {
+      throw new Error(`Source not found: ${id}`);
+    }
+    this.sourceRepository.setDefaultSource(id);
+  }
+
+  disconnectCloudSource(): void {
+    this.init();
+    const localSource = this.sourceRepository.getSourceById("local");
+    if (localSource) {
+      this.sourceRepository.setDefaultSource(localSource.id);
+    }
+    this.sourceRepository.removeSource("cloud");
   }
 
   async storeKnowledge(input: StoreKnowledgeInput): Promise<KnowledgeEntry> {
