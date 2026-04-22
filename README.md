@@ -156,6 +156,11 @@ knowit source list
 knowit source connect notion
 knowit source show notion
 
+# Cloud account commands
+knowit cloud login --token <token>
+knowit cloud whoami
+knowit cloud logout
+
 # Import existing markdown knowledge
 knowit import-md --yes
 ```

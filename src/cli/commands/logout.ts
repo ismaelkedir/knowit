@@ -2,9 +2,14 @@ import { MemoryService } from "../../services/memoryService.js";
 import { Command } from "commander";
 import { clearCredentials, loadCredentials } from "../../utils/credentials.js";
 
-export function registerLogoutCommand(program: Command): void {
+interface RegisterLogoutCommandOptions {
+  hidden?: boolean;
+  name?: string;
+}
+
+export function registerLogoutCommand(program: Command, options: RegisterLogoutCommandOptions = {}): void {
   program
-    .command("logout")
+    .command(options.name ?? "logout", { hidden: options.hidden ?? false })
     .description("Disconnect from Knowit Cloud and return to local storage")
     .action(async () => {
       const creds = loadCredentials();

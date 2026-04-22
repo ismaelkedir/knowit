@@ -12,6 +12,11 @@ interface LoginOptions {
   defaultSource?: string;
 }
 
+interface RegisterLoginCommandOptions {
+  hidden?: boolean;
+  name?: string;
+}
+
 const describeStorageScope = (): string => {
   const storageScope = getStorageScope();
   if (storageScope === "project" || storageScope === "global") {
@@ -55,9 +60,9 @@ const resolveDefaultToCloud = async (options: LoginOptions): Promise<boolean> =>
   }
 };
 
-export function registerLoginCommand(program: Command): void {
+export function registerLoginCommand(program: Command, options: RegisterLoginCommandOptions = {}): void {
   program
-    .command("login")
+    .command(options.name ?? "login", { hidden: options.hidden ?? false })
     .description("Connect the Knowit CLI to your cloud account")
     .option("--token <token>", "Your Knowit Cloud API token (ki_live_...)")
     .option("--api-url <url>", "Cloud API URL (default: https://www.useknowit.dev)")
@@ -148,7 +153,7 @@ export function registerLoginCommand(program: Command): void {
       } else {
         console.log("Knowit Cloud is available as an optional source. Your default source remains local.");
       }
-      console.log("\nTo verify: knowit whoami");
+      console.log("\nTo verify: knowit cloud whoami");
     });
 }
 
