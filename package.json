@@ -1,6 +1,6 @@
 {
   "name": "knowit",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Shared team memory for AI coding agents — MCP server and CLI for persistent, queryable knowledge across sessions and teammates",
   "type": "module",
   "main": "dist/server/mcpServer.js",
