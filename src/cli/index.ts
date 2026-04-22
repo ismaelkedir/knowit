@@ -19,6 +19,12 @@ import { migrateCommand } from "./commands/migrate.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerLogoutCommand } from "./commands/logout.js";
 import { registerWhoamiCommand } from "./commands/whoami.js";
+import {
+  clearCommandStart,
+  markCommandStart,
+  printCommandElapsed,
+  shouldTimeCommand,
+} from "./timing.js";
 import { notifyIfUpdateAvailable } from "./updateNotifier.js";
 import { startMcpServer } from "../server/mcpServer.js";
 
@@ -27,11 +33,34 @@ dotenv.config();
 const require = createRequire(import.meta.url);
 const packageJson = require("../../package.json") as { version: string };
 const program = new Command();
+let activeTimedCommand: Command | null = null;
+
+const maybeStartTiming = (_thisCommand: Command, actionCommand: Command): void => {
+  if (!shouldTimeCommand(actionCommand)) {
+    return;
+  }
+
+  activeTimedCommand = actionCommand;
+  markCommandStart(actionCommand);
+};
+
+const maybePrintTiming = (_thisCommand: Command, actionCommand: Command): void => {
+  if (!shouldTimeCommand(actionCommand)) {
+    return;
+  }
+
+  printCommandElapsed(actionCommand);
+  clearCommandStart(actionCommand);
+  activeTimedCommand = null;
+};
 
 program
   .name("knowit")
   .description("Shared team memory for AI coding agents")
   .version(packageJson.version);
+
+program.hook("preAction", maybeStartTiming);
+program.hook("postAction", maybePrintTiming);
 
 program
   .command("serve")
@@ -181,6 +210,11 @@ registerWhoamiCommand(program);
 notifyIfUpdateAvailable(process.argv.slice(2));
 
 program.parseAsync(process.argv).catch((error: unknown) => {
+  if (activeTimedCommand && shouldTimeCommand(activeTimedCommand)) {
+    printCommandElapsed(activeTimedCommand, true);
+    clearCommandStart(activeTimedCommand);
+    activeTimedCommand = null;
+  }
   const message = error instanceof Error ? error.message : "Unknown CLI error";
   console.error(message);
   process.exitCode = 1;
