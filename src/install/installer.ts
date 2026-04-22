@@ -19,6 +19,8 @@ export interface InstallSelections {
   markdownPaths: string[];
   repo: string;
   cwd: string;
+  installGlobally?: boolean;
+  useNpxForMcp?: boolean;
 }
 
 export interface InstallPlan {
@@ -34,6 +36,8 @@ export interface InstallPlan {
   markdownImports: MarkdownImportPlan[];
   mcpRegistrations: ClientRegistrationPlan[];
   warnings: string[];
+  globalInstallRequested: boolean;
+  useNpxForMcp: boolean;
 }
 
 export interface InstallInstructionTarget {
@@ -59,6 +63,7 @@ export interface InstallResult {
   importedEntryCount: number;
   instructionPaths: string[];
   registrationOutcomes: ClientRegistrationOutcome[];
+  globalInstallSucceeded?: boolean;
 }
 
 export interface CommandRunner {
@@ -296,7 +301,11 @@ const buildMcpRegistrationPlan = (
   client: SupportedClient,
   scope: InstallScope,
   dbPath: string,
+  useNpx: boolean,
 ): ClientRegistrationPlan => {
+  const serverCommand = useNpx ? "npx" : "knowit";
+  const serverArgs = useNpx ? ["knowit", "serve"] : ["serve"];
+
   if (client === "claude") {
     const claudeScope = scope === "project" ? "project" : "user";
     return {
@@ -308,8 +317,8 @@ const buildMcpRegistrationPlan = (
         "-s",
         claudeScope,
         "knowit",
-        "knowit",
-        "serve",
+        serverCommand,
+        ...serverArgs,
         "-e",
         `KNOWIT_DB_PATH=${dbPath}`,
       ],
@@ -319,11 +328,11 @@ const buildMcpRegistrationPlan = (
   return {
     client,
     command: "codex",
-    args: ["mcp", "add", "knowit", "--env", `KNOWIT_DB_PATH=${dbPath}`, "--", "knowit", "serve"],
+    args: ["mcp", "add", "knowit", "--env", `KNOWIT_DB_PATH=${dbPath}`, "--", serverCommand, ...serverArgs],
   };
 };
 
-const mergeProjectMcpConfig = (existingContents: string | null): string => {
+const mergeProjectMcpConfig = (existingContents: string | null, useNpx: boolean): string => {
   const parsed =
     existingContents && existingContents.trim().length > 0
       ? (JSON.parse(existingContents) as { mcpServers?: Record<string, unknown> })
@@ -341,8 +350,8 @@ const mergeProjectMcpConfig = (existingContents: string | null): string => {
         ...mcpServers,
         knowit: {
           type: "stdio",
-          command: "knowit",
-          args: ["serve"],
+          command: useNpx ? "npx" : "knowit",
+          args: useNpx ? ["knowit", "serve"] : ["serve"],
           env: {
             KNOWIT_DB_PATH: ".knowit/knowit.db",
           },
@@ -365,6 +374,9 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
   const markdownImports = selections.migrateMarkdown
     ? selections.markdownPaths.map((filePath) => buildMarkdownImportPlan(filePath, selections.cwd))
     : [];
+
+  const globalInstallRequested = selections.installGlobally ?? false;
+  const useNpxForMcp = selections.useNpxForMcp ?? false;
 
   const warnings: string[] = [];
   if (selections.scope === "project" && selections.clients.includes("codex")) {
@@ -390,9 +402,16 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
     projectMcpConfigPath: getProjectMcpConfigPath(selections.scope, selections.cwd),
     markdownImports,
     mcpRegistrations: selections.clients.map((client) =>
-      buildMcpRegistrationPlan(client, selections.scope, getInstallDatabasePath(selections.scope, selections.cwd)),
+      buildMcpRegistrationPlan(
+        client,
+        selections.scope,
+        getInstallDatabasePath(selections.scope, selections.cwd),
+        useNpxForMcp,
+      ),
     ),
     warnings,
+    globalInstallRequested,
+    useNpxForMcp,
   };
 };
 
@@ -405,6 +424,17 @@ export const applyInstallPlan = async (
   },
 ): Promise<InstallResult> => {
   const runner = options.runner ?? defaultCommandRunner;
+
+  let globalInstallSucceeded: boolean | undefined;
+  if (plan.globalInstallRequested) {
+    try {
+      runner.run("npm", ["install", "-g", "knowit"], options.cwd);
+      globalInstallSucceeded = true;
+    } catch {
+      globalInstallSucceeded = false;
+    }
+  }
+
   const originalDbPath = process.env.KNOWIT_DB_PATH;
 
   process.env.KNOWIT_DB_PATH = plan.dbPath;
@@ -450,7 +480,7 @@ export const applyInstallPlan = async (
       const currentMcpConfig = fs.existsSync(plan.projectMcpConfigPath)
         ? fs.readFileSync(plan.projectMcpConfigPath, "utf8")
         : null;
-      fs.writeFileSync(plan.projectMcpConfigPath, mergeProjectMcpConfig(currentMcpConfig), "utf8");
+      fs.writeFileSync(plan.projectMcpConfigPath, mergeProjectMcpConfig(currentMcpConfig, plan.useNpxForMcp), "utf8");
     }
 
     let importedEntryCount = 0;
@@ -482,6 +512,7 @@ export const applyInstallPlan = async (
       importedEntryCount,
       instructionPaths: plan.instructionTargets.map((target) => target.path),
       registrationOutcomes,
+      globalInstallSucceeded,
     };
   } finally {
     resetDatabase();
