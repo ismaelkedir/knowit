@@ -203,9 +203,11 @@ program
   .option("--dry-run", "Preview entries without migrating")
   .action(migrateCommand);
 
-registerLoginCommand(program);
-registerLogoutCommand(program);
-registerWhoamiCommand(program);
+const cloudProgram = program.command("cloud").description("Manage Knowit Cloud access");
+
+registerLoginCommand(cloudProgram);
+registerLogoutCommand(cloudProgram);
+registerWhoamiCommand(cloudProgram);
 
 notifyIfUpdateAvailable(process.argv.slice(2));
 

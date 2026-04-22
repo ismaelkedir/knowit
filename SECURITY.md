@@ -19,7 +19,7 @@ You should receive an acknowledgement after the report is reviewed.
 
 ## Credential Storage
 
-`knowit login` stores cloud credentials at `~/.knowit/credentials.json`.
+`knowit cloud login` stores cloud credentials at `~/.knowit/credentials.json`.
 
 - The file is written with `0o600` permissions so only the current user can read and write it on correctly configured systems.
 - The credentials are stored as plain JSON, not in the OS keychain.

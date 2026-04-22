@@ -2,9 +2,14 @@ import { Command } from "commander";
 import { loadCredentials } from "../../utils/credentials.js";
 import { KNOWIT_CLOUD_DISABLED_MESSAGE, isKnowitCloudEnabled } from "../../utils/cloudAvailability.js";
 
-export function registerWhoamiCommand(program: Command): void {
+interface RegisterWhoamiCommandOptions {
+  hidden?: boolean;
+  name?: string;
+}
+
+export function registerWhoamiCommand(program: Command, options: RegisterWhoamiCommandOptions = {}): void {
   program
-    .command("whoami")
+    .command(options.name ?? "whoami", { hidden: options.hidden ?? false })
     .description("Show the currently logged-in cloud account")
     .action(async () => {
       if (!isKnowitCloudEnabled()) {
@@ -18,7 +23,7 @@ export function registerWhoamiCommand(program: Command): void {
 
       if (!token) {
         console.log("Not logged in to Knowit Cloud.");
-        console.log("Run: knowit login --token <your-token>");
+        console.log("Run: knowit cloud login --token <your-token>");
         return;
       }
 
