@@ -40,6 +40,7 @@ export const knowledgeEntryInputSchema = z
     title: z.string().min(1),
     type: knowledgeTypeSchema,
     content: z.string().min(1),
+    summary: z.string().max(300).nullable().optional(),
     scope: knowledgeScopeSchema.default("global"),
     repo: z.string().trim().min(1).nullable().optional(),
     domain: z.string().trim().min(1).nullable().optional(),

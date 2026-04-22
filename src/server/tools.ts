@@ -287,7 +287,7 @@ export const registerTools = (server: McpServer, memoryService: MemoryService, i
     "Batch store multiple knowledge items from this coding session. Existing entries with the same title, type, scope, repo, and domain are updated rather than duplicated. Call this at the end of a session to persist decisions, patterns, and conventions discovered during the session.",
     captureSessionLearningsSchema,
     withToolLogging("capture_session_learnings", async (input) => {
-      const stored = await Promise.all(
+      const settled = await Promise.allSettled(
         input.learnings.map((learning) =>
           memoryService.storeKnowledge({
             ...learning,
@@ -296,7 +296,28 @@ export const registerTools = (server: McpServer, memoryService: MemoryService, i
           }),
         ),
       );
-      return asTextContent({ stored: stored.length, entries: stored.map((e) => ({ id: e.id, title: e.title })) });
+
+      const stored = settled
+        .flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+        .map((entry) => ({ id: entry.id, title: entry.title }));
+      const failed = settled.flatMap((result, index) =>
+        result.status === "rejected"
+          ? [
+              {
+                index,
+                title: input.learnings[index]?.title ?? "unknown",
+                reason: result.reason instanceof Error ? result.reason.message : String(result.reason),
+              },
+            ]
+          : [],
+      );
+
+      return asTextContent({
+        stored: stored.length,
+        failed: failed.length,
+        entries: stored,
+        failures: failed,
+      });
     }),
   );
 };

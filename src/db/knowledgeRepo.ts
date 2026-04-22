@@ -24,6 +24,7 @@ interface KnowledgeRow {
   title: string;
   type: string;
   content: string;
+  summary: string | null;
   scope: string;
   repo: string | null;
   domain: string | null;
@@ -71,6 +72,7 @@ const mapRowToEntry = (row: KnowledgeRow): KnowledgeEntry =>
     title: row.title,
     type: row.type,
     content: row.content,
+    summary: row.summary,
     scope: row.scope,
     repo: row.repo,
     domain: row.domain,
@@ -85,9 +87,9 @@ const mapRowToEntry = (row: KnowledgeRow): KnowledgeEntry =>
 
 const buildWhereClause = (
   filters: Pick<Partial<KnowledgeListFilters>, "type" | "repo" | "domain">,
-): { clause: string; params: Record<string, string> } => {
+): { clause: string; params: Record<string, string | number> } => {
   const conditions: string[] = [];
-  const params: Record<string, string> = {};
+  const params: Record<string, string | number> = {};
 
   if (filters.type) {
     conditions.push("type = @type");
@@ -171,6 +173,7 @@ export class KnowledgeRepository {
       title: parsedInput.title,
       type: parsedInput.type,
       content: parsedInput.content,
+      summary: parsedInput.summary ?? null,
       scope: parsedInput.scope,
       repo: parsedInput.repo ?? null,
       domain: parsedInput.domain ?? null,
@@ -187,10 +190,11 @@ export class KnowledgeRepository {
       .prepare(
         `
           INSERT INTO knowledge_entries (
-            id, title, type, content, scope, repo, domain, tags, embedding, created_at, updated_at, confidence
-            , url, metadata
+            id, title, type, content, summary, scope, repo, domain, tags, embedding, created_at, updated_at,
+            confidence, url, metadata
           ) VALUES (
-            @id, @title, @type, @content, @scope, @repo, @domain, @tags, @embedding, @createdAt, @updatedAt, @confidence, @url, @metadata
+            @id, @title, @type, @content, @summary, @scope, @repo, @domain, @tags, @embedding, @createdAt,
+            @updatedAt, @confidence, @url, @metadata
           )
         `,
       )
@@ -199,6 +203,7 @@ export class KnowledgeRepository {
         title: entry.title,
         type: entry.type,
         content: entry.content,
+        summary: entry.summary,
         scope: entry.scope,
         repo: entry.repo,
         domain: entry.domain,
@@ -246,6 +251,7 @@ export class KnowledgeRepository {
         `
         UPDATE knowledge_entries
         SET content = @content,
+            summary = @summary,
             tags = @tags,
             embedding = @embedding,
             confidence = @confidence,
@@ -258,6 +264,7 @@ export class KnowledgeRepository {
       .run({
         id,
         content: input.content,
+        summary: input.summary ?? null,
         tags: serializeTags(input.tags),
         embedding: input.embedding ? JSON.stringify(input.embedding) : null,
         confidence: input.confidence,
@@ -286,11 +293,15 @@ export class KnowledgeRepository {
           SELECT * FROM knowledge_entries
           ${clause}
           ORDER BY updated_at DESC
+          LIMIT @limit
         `,
       )
-      .all(params) as KnowledgeRow[];
+      .all({
+        ...params,
+        limit: parsedFilters.limit,
+      }) as KnowledgeRow[];
 
-    return rows.map(mapRowToEntry).slice(0, parsedFilters.limit);
+    return rows.map(mapRowToEntry);
   }
 
   searchEntries(
@@ -298,9 +309,11 @@ export class KnowledgeRepository {
     filters: Partial<KnowledgeSearchFilters> = {},
   ): RankedKnowledgeEntry[] {
     const parsedFilters = knowledgeSearchFiltersSchema.parse(filters);
+    const candidateLimit = Math.max(parsedFilters.limit, 200);
     const candidates = this.listEntries({
       repo: parsedFilters.repo,
       domain: parsedFilters.domain,
+      limit: candidateLimit,
     });
 
     return rankEntriesBySimilarity(candidates, queryEmbedding).slice(0, parsedFilters.limit);
@@ -314,9 +327,11 @@ export class KnowledgeRepository {
       ...filters,
       query,
     });
+    const candidateLimit = Math.max(parsedFilters.limit, 200);
     const candidates = this.listEntries({
       repo: parsedFilters.repo,
       domain: parsedFilters.domain,
+      limit: candidateLimit,
     });
 
     return rankEntriesByTextMatch(candidates, query)
@@ -326,9 +341,11 @@ export class KnowledgeRepository {
 
   resolveContext(queryEmbedding: number[], input: ResolveContextInput): RankedKnowledgeEntry[] {
     const parsedInput = resolveContextInputSchema.parse(input);
+    const candidateLimit = Math.max(parsedInput.limit, 200);
     const candidates = this.listEntries({
       repo: parsedInput.repo,
       domain: parsedInput.domain,
+      limit: candidateLimit,
     }).filter((entry) => {
       if (entry.scope === "repo") {
         return Boolean(parsedInput.repo) && entry.repo === parsedInput.repo;
@@ -348,9 +365,11 @@ export class KnowledgeRepository {
 
   resolveContextByText(input: ResolveContextInput): RankedKnowledgeEntry[] {
     const parsedInput = resolveContextInputSchema.parse(input);
+    const candidateLimit = Math.max(parsedInput.limit, 200);
     const candidates = this.listEntries({
       repo: parsedInput.repo,
       domain: parsedInput.domain,
+      limit: candidateLimit,
     }).filter((entry) => {
       if (entry.scope === "repo") {
         return Boolean(parsedInput.repo) && entry.repo === parsedInput.repo;

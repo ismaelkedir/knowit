@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   title TEXT NOT NULL,
   type TEXT NOT NULL,
   content TEXT NOT NULL,
+  summary TEXT,
   scope TEXT NOT NULL,
   repo TEXT,
   domain TEXT,
@@ -79,6 +80,10 @@ const hasColumn = (database: Database.Database, tableName: string, columnName: s
 };
 
 const applyCompatibilityMigrations = (database: Database.Database): void => {
+  if (hasColumn(database, "knowledge_entries", "summary") === false) {
+    database.exec("ALTER TABLE knowledge_entries ADD COLUMN summary TEXT");
+  }
+
   if (hasColumn(database, "knowledge_entries", "url") === false) {
     database.exec("ALTER TABLE knowledge_entries ADD COLUMN url TEXT");
   }
