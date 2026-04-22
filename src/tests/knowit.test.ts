@@ -709,3 +709,165 @@ test("memory services with injected databases do not share state", async () => {
     secondDb.cleanup();
   }
 });
+
+test("cloud bootstrap registers cloud without replacing local as the default source", () => {
+  const { database, cleanup } = createTestDatabase();
+  const originalCloudEnabled = process.env.KNOWIT_CLOUD_ENABLED;
+  const originalCloudToken = process.env.KNOWIT_CLOUD_TOKEN;
+  const originalCloudApiUrl = process.env.KNOWIT_CLOUD_API_URL;
+
+  try {
+    process.env.KNOWIT_CLOUD_ENABLED = "true";
+    process.env.KNOWIT_CLOUD_TOKEN = "ki_live_testtoken";
+    process.env.KNOWIT_CLOUD_API_URL = "https://test.useknowit.dev";
+
+    const service = new MemoryService({ database });
+    const sources = service.listSources();
+
+    assert.equal(sources.find((source) => source.id === "local")?.isDefault, true);
+    assert.equal(sources.find((source) => source.id === "cloud")?.isDefault, false);
+  } finally {
+    if (originalCloudEnabled === undefined) {
+      delete process.env.KNOWIT_CLOUD_ENABLED;
+    } else {
+      process.env.KNOWIT_CLOUD_ENABLED = originalCloudEnabled;
+    }
+
+    if (originalCloudToken === undefined) {
+      delete process.env.KNOWIT_CLOUD_TOKEN;
+    } else {
+      process.env.KNOWIT_CLOUD_TOKEN = originalCloudToken;
+    }
+
+    if (originalCloudApiUrl === undefined) {
+      delete process.env.KNOWIT_CLOUD_API_URL;
+    } else {
+      process.env.KNOWIT_CLOUD_API_URL = originalCloudApiUrl;
+    }
+
+    cleanup();
+  }
+});
+
+test("cloud bootstrap repairs an auto-promoted cloud default back to local", () => {
+  const { database, cleanup } = createTestDatabase();
+  const originalCloudEnabled = process.env.KNOWIT_CLOUD_ENABLED;
+  const originalCloudToken = process.env.KNOWIT_CLOUD_TOKEN;
+  const originalCloudApiUrl = process.env.KNOWIT_CLOUD_API_URL;
+
+  try {
+    const sourceRepository = new SourceRepository(database);
+    sourceRepository.init();
+    sourceRepository.ensureLocalSource();
+    sourceRepository.upsertSyntheticSource({
+      id: "cloud",
+      name: "Knowit Cloud",
+      kind: "cloud",
+      isDefault: true,
+      config: { mode: "cloud", apiUrl: "https://test.useknowit.dev", token: "ki_live_oldtoken" },
+    });
+
+    process.env.KNOWIT_CLOUD_ENABLED = "true";
+    process.env.KNOWIT_CLOUD_TOKEN = "ki_live_testtoken";
+    process.env.KNOWIT_CLOUD_API_URL = "https://test.useknowit.dev";
+
+    const service = new MemoryService({ database });
+    const sources = service.listSources();
+
+    assert.equal(sources.find((source) => source.id === "local")?.isDefault, true);
+    assert.equal(sources.find((source) => source.id === "cloud")?.isDefault, false);
+  } finally {
+    if (originalCloudEnabled === undefined) {
+      delete process.env.KNOWIT_CLOUD_ENABLED;
+    } else {
+      process.env.KNOWIT_CLOUD_ENABLED = originalCloudEnabled;
+    }
+
+    if (originalCloudToken === undefined) {
+      delete process.env.KNOWIT_CLOUD_TOKEN;
+    } else {
+      process.env.KNOWIT_CLOUD_TOKEN = originalCloudToken;
+    }
+
+    if (originalCloudApiUrl === undefined) {
+      delete process.env.KNOWIT_CLOUD_API_URL;
+    } else {
+      process.env.KNOWIT_CLOUD_API_URL = originalCloudApiUrl;
+    }
+
+    cleanup();
+  }
+});
+
+test("cloud bootstrap keeps cloud as the default when explicitly requested", () => {
+  const { database, cleanup } = createTestDatabase();
+  const originalCloudEnabled = process.env.KNOWIT_CLOUD_ENABLED;
+  const originalCloudToken = process.env.KNOWIT_CLOUD_TOKEN;
+  const originalCloudApiUrl = process.env.KNOWIT_CLOUD_API_URL;
+  const originalCloudDefault = process.env.KNOWIT_CLOUD_DEFAULT;
+
+  try {
+    process.env.KNOWIT_CLOUD_ENABLED = "true";
+    process.env.KNOWIT_CLOUD_TOKEN = "ki_live_testtoken";
+    process.env.KNOWIT_CLOUD_API_URL = "https://test.useknowit.dev";
+    process.env.KNOWIT_CLOUD_DEFAULT = "true";
+
+    const service = new MemoryService({ database });
+    const sources = service.listSources();
+
+    assert.equal(sources.find((source) => source.id === "cloud")?.isDefault, true);
+    assert.equal(sources.find((source) => source.id === "local")?.isDefault, false);
+  } finally {
+    if (originalCloudEnabled === undefined) {
+      delete process.env.KNOWIT_CLOUD_ENABLED;
+    } else {
+      process.env.KNOWIT_CLOUD_ENABLED = originalCloudEnabled;
+    }
+
+    if (originalCloudToken === undefined) {
+      delete process.env.KNOWIT_CLOUD_TOKEN;
+    } else {
+      process.env.KNOWIT_CLOUD_TOKEN = originalCloudToken;
+    }
+
+    if (originalCloudApiUrl === undefined) {
+      delete process.env.KNOWIT_CLOUD_API_URL;
+    } else {
+      process.env.KNOWIT_CLOUD_API_URL = originalCloudApiUrl;
+    }
+
+    if (originalCloudDefault === undefined) {
+      delete process.env.KNOWIT_CLOUD_DEFAULT;
+    } else {
+      process.env.KNOWIT_CLOUD_DEFAULT = originalCloudDefault;
+    }
+
+    cleanup();
+  }
+});
+
+test("disconnectCloudSource removes cloud and restores local as the default source", () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const sourceRepository = new SourceRepository(database);
+    sourceRepository.init();
+    sourceRepository.ensureLocalSource();
+    sourceRepository.upsertSyntheticSource({
+      id: "cloud",
+      name: "Knowit Cloud",
+      kind: "cloud",
+      isDefault: true,
+      config: { mode: "cloud", apiUrl: "https://test.useknowit.dev", token: "ki_live_testtoken" },
+    });
+
+    const service = new MemoryService({ database });
+    service.disconnectCloudSource();
+
+    const sources = service.listSources();
+    assert.equal(sources.find((source) => source.id === "cloud"), undefined);
+    assert.equal(sources.find((source) => source.id === "local")?.isDefault, true);
+  } finally {
+    cleanup();
+  }
+});

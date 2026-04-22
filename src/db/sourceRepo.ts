@@ -172,6 +172,10 @@ export class SourceRepository {
     return row ? mapRowToSource(row) : null;
   }
 
+  removeSource(id: string): void {
+    this.db.prepare("DELETE FROM knowledge_sources WHERE id = ?").run(id);
+  }
+
   setDefaultSource(id: string): void {
     this.clearDefaultSource();
     this.db
