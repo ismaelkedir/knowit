@@ -61,10 +61,10 @@ The default local storage is SQLite, which gives Knowit a simple local-first set
 ## Install
 
 ```bash
-npm install -g knowit
+npx knowit install
 ```
 
-Requires Node.js 20+.
+Requires Node.js 20+. No global install needed — the wizard runs via `npx` and can install knowit globally for you if you want faster future starts.
 
 Knowit's CLI also checks for newer published versions and shows a non-blocking update notice in interactive terminal sessions.
 
@@ -73,10 +73,10 @@ Knowit's CLI also checks for newer published versions and shows a non-blocking u
 ### 1. Install Knowit into a project
 
 ```bash
-knowit install
+npx knowit install
 ```
 
-`knowit install` is the main setup flow. It can:
+`npx knowit install` is the main setup flow. It can:
 
 - initialize the local database
 - register the Knowit MCP server with supported clients
@@ -138,7 +138,8 @@ In practice, Knowit is a layer for execution context:
 
 ```bash
 # Setup
-knowit install
+npx knowit install
+knowit install   # if already installed globally
 knowit init
 
 # Add and search knowledge
@@ -206,7 +207,7 @@ Entries also support tags, optional URLs, metadata, and confidence scores.
 Knowit is local-first, but it can still be shared across a team by pointing everyone at the same SQLite database path.
 
 ```bash
-KNOWIT_DB_PATH=/shared/team/knowit.db knowit install --scope global --client claude
+KNOWIT_DB_PATH=/shared/team/knowit.db npx knowit install --scope global --client claude
 ```
 
 That gives every developer and every agent the same durable memory source without adding a hosted dependency.

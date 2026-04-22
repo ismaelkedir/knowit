@@ -1,5 +1,6 @@
 import path from "node:path";
 import readline from "node:readline/promises";
+import { spawnSync } from "node:child_process";
 import { stdin as input, stdout as output } from "node:process";
 import {
   applyInstallPlan,
@@ -48,6 +49,12 @@ const parseScope = (value: string | undefined): InstallScope | null => {
     return value;
   }
   throw new Error("scope must be one of: project, global");
+};
+
+const isGloballyInstalled = (): boolean => {
+  const cmd = process.platform === "win32" ? "where" : "which";
+  const result = spawnSync(cmd, ["knowit"], { stdio: "pipe" });
+  return result.status === 0;
 };
 
 const parseSource = (value: string | undefined): KnownSourceProvider | null => {
@@ -110,6 +117,12 @@ const printPlan = (plan: InstallPlan): void => {
   output.write(`- Scope: ${plan.scope}\n`);
   output.write(`- Preferred source: ${plan.sourceProvider}\n`);
   output.write(`- Database path: ${plan.dbPath}\n`);
+  if (plan.globalInstallRequested) {
+    output.write("- Global install: npm install -g knowit\n");
+  }
+  if (plan.useNpxForMcp) {
+    output.write("- MCP server command: npx knowit serve\n");
+  }
 
   if (plan.instructionTargets.length > 0) {
     output.write("- Instruction files:\n");
@@ -153,6 +166,8 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
   const predefinedSource = parseSource(options.source);
   const markdownPaths = (options.markdownPath ?? []).map((filePath) => path.resolve(cwd, filePath));
 
+  const globallyInstalled = isGloballyInstalled();
+
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     if (!predefinedClients || !predefinedScope || !predefinedSource) {
       throw new Error("install requires --client, --scope, and --source when not running in an interactive terminal.");
@@ -167,6 +182,8 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
       markdownPaths: options.migrateMd ? (markdownPaths.length > 0 ? markdownPaths : detectMarkdownCandidates(cwd)) : [],
       repo,
       cwd,
+      installGlobally: false,
+      useNpxForMcp: !globallyInstalled,
     };
   }
 
@@ -194,6 +211,15 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
         { label: "Local Knowit storage", value: "local" },
         { label: "Notion (routed through Knowit guidance)", value: "notion" },
       ])) as KnownSourceProvider);
+
+    let installGlobally = false;
+    if (!globallyInstalled) {
+      installGlobally = await askYesNo(
+        rl,
+        "Install knowit globally? (faster MCP startup; skip to use npx instead)",
+        true,
+      );
+    }
 
     let mcpServerName = options.mcpServerName;
     if (!mcpServerName && sourceChoice === "notion") {
@@ -231,6 +257,8 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
       markdownPaths: resolvedMarkdownPaths,
       repo,
       cwd,
+      installGlobally,
+      useNpxForMcp: !globallyInstalled && !installGlobally,
     };
   } finally {
     rl.close();
@@ -264,6 +292,14 @@ export const installCommand = async (options: InstallOptions): Promise<void> => 
   const result = await applyInstallPlan(plan, {
     cwd: selections.cwd,
   });
+
+  if (result.globalInstallSucceeded === true) {
+    output.write("knowit installed globally.\n");
+  } else if (result.globalInstallSucceeded === false) {
+    output.write(
+      "Global install failed. MCP config uses `knowit serve` — run `npm install -g knowit` manually before starting your agent.\n",
+    );
+  }
 
   output.write(`Knowit installed for ${result.plan.clients.join(", ")}.\n`);
   output.write(`Database: ${result.plan.dbPath}\n`);
