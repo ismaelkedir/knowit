@@ -4,12 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { getDatabasePath, getStorageScope, initializeDatabase, resetDatabase } from "../db/database.js";
+import { getDatabasePath, getStoragePath, getStorageScope, initializeDatabase, resetDatabase } from "../db/database.js";
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
 import { shouldCheckForUpdates } from "../cli/updateNotifier.js";
 import { SqliteMemorySource } from "../sources/sqliteSource.js";
 import { MemoryService } from "../services/memoryService.js";
+import { migrateSqliteToJsonl } from "../storage/sqliteToJsonlMigration.js";
 import { storeKnowledgeInputSchema } from "../types/knowledge.js";
 import type { KnowledgeSource } from "../types/source.js";
 
@@ -243,7 +244,7 @@ test("local sqlite source stores and retrieves knowledge without embeddings", as
   }
 });
 
-test("initializeDatabase adds the summary column for legacy databases", () => {
+test("initializeDatabase adds render fields for legacy databases", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-legacy-"));
   const database = new Database(path.join(tempDir, "knowit.db"));
 
@@ -281,9 +282,57 @@ test("initializeDatabase adds the summary column for legacy databases", () => {
       .pragma("table_info(knowledge_entries)", { simple: false }) as Array<{ name: string }>;
 
     assert.ok(columns.some((column) => column.name === "summary"));
+    assert.ok(columns.some((column) => column.name === "body"));
   } finally {
     database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("structured body is persisted and plain content falls back to paragraph blocks", async () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, failingEmbeddingGenerator);
+
+    const structured = await source.storeKnowledge({
+      type: "note",
+      title: "Renderable note",
+      content: "Use the portal renderer for display.",
+      body: [
+        { type: "heading", level: 2, text: "Reader contract" },
+        { type: "list", style: "bullet", items: ["Keep content searchable", "Keep body renderable"] },
+      ],
+      scope: "repo",
+      repo: "knowit",
+      tags: ["reader"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    assert.deepEqual(structured.body, [
+      { type: "heading", level: 2, text: "Reader contract" },
+      { type: "list", style: "bullet", items: ["Keep content searchable", "Keep body renderable"] },
+    ]);
+
+    const fallback = await source.storeKnowledge({
+      type: "note",
+      title: "Plain note",
+      content: "First paragraph.\n\nSecond paragraph.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["reader"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    assert.deepEqual(fallback.body, [
+      { type: "paragraph", text: "First paragraph." },
+      { type: "paragraph", text: "Second paragraph." },
+    ]);
+  } finally {
+    cleanup();
   }
 });
 
@@ -367,7 +416,7 @@ test("CLI update checks stay off for stdio server mode and passive flags", () =>
   assert.equal(shouldCheckForUpdates(["search", "retry state"]), true);
 });
 
-test("database path defaults to a project-local .knowit directory", () => {
+test("storage path defaults to a project-local JSONL file", () => {
   const originalScope = process.env.KNOWIT_STORAGE_SCOPE;
   const originalPath = process.env.KNOWIT_DB_PATH;
 
@@ -377,6 +426,7 @@ test("database path defaults to a project-local .knowit directory", () => {
   try {
     const projectRoot = "/tmp/knowit-project";
     assert.equal(getStorageScope(), "project");
+    assert.equal(getStoragePath(projectRoot), path.join(projectRoot, ".knowit", "knowledge.jsonl"));
     assert.equal(getDatabasePath(projectRoot), path.join(projectRoot, ".knowit", "knowit.db"));
   } finally {
     if (originalScope === undefined) {
@@ -419,6 +469,174 @@ test("database path supports global and custom storage scopes", () => {
     } else {
       process.env.KNOWIT_DB_PATH = originalPath;
     }
+  }
+});
+
+test("project-scope memory service uses JSONL local storage by default", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-jsonl-"));
+  const originalScope = process.env.KNOWIT_STORAGE_SCOPE;
+  const originalPath = process.env.KNOWIT_DB_PATH;
+  const originalCwd = process.cwd();
+
+  try {
+    delete process.env.KNOWIT_STORAGE_SCOPE;
+    delete process.env.KNOWIT_DB_PATH;
+    process.chdir(tempDir);
+    resetDatabase();
+
+    const service = new MemoryService();
+    service.init();
+
+    const local = service.listSources().find((source) => source.id === "local");
+    assert.equal(local?.kind, "jsonl");
+    assert.equal(local?.name, "Local JSONL");
+
+    const entry = await service.storeKnowledge({
+      title: "Project JSONL storage",
+      type: "decision",
+      content: "Project-scope canonical memory records are stored in JSONL.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["jsonl"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    const entries = await service.listKnowledge({ source: "local", repo: "knowit", limit: 10 });
+    const jsonlPath = path.join(tempDir, ".knowit", "knowledge.jsonl");
+
+    assert.equal(entry.embedding, null);
+    assert.ok(entries.some((item) => item.title === "Project JSONL storage"));
+    assert.ok(fs.existsSync(jsonlPath));
+    assert.match(fs.readFileSync(jsonlPath, "utf8"), /"title":"Project JSONL storage"/);
+    assert.equal(fs.existsSync(path.join(tempDir, ".knowit", "knowit.db")), false);
+  } finally {
+    process.chdir(originalCwd);
+    resetDatabase();
+    if (originalScope === undefined) {
+      delete process.env.KNOWIT_STORAGE_SCOPE;
+    } else {
+      process.env.KNOWIT_STORAGE_SCOPE = originalScope;
+    }
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("project-scope JSONL storage migrates existing project SQLite entries", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-jsonl-migrate-"));
+  const originalScope = process.env.KNOWIT_STORAGE_SCOPE;
+  const originalPath = process.env.KNOWIT_DB_PATH;
+  const originalCwd = process.cwd();
+  const knowitDir = path.join(tempDir, ".knowit");
+
+  try {
+    fs.mkdirSync(knowitDir, { recursive: true });
+    const legacyDatabase = new Database(path.join(knowitDir, "knowit.db"));
+    initializeDatabase(legacyDatabase);
+    const legacyRepository = new KnowledgeRepository(legacyDatabase);
+    legacyRepository.createEntry({
+      title: "Legacy project entry",
+      type: "decision",
+      content: "Existing project SQLite records should migrate to JSONL.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["migration"],
+      confidence: 1,
+      metadata: {},
+    });
+    legacyDatabase.close();
+
+    delete process.env.KNOWIT_STORAGE_SCOPE;
+    delete process.env.KNOWIT_DB_PATH;
+    process.chdir(tempDir);
+    resetDatabase();
+
+    const service = new MemoryService();
+    service.init();
+    const entries = await service.listKnowledge({ source: "local", repo: "knowit", limit: 10 });
+
+    assert.ok(entries.some((entry) => entry.title === "Legacy project entry"));
+    assert.match(fs.readFileSync(path.join(knowitDir, "knowledge.jsonl"), "utf8"), /"title":"Legacy project entry"/);
+    assert.equal(service.listSources().find((source) => source.id === "local")?.kind, "jsonl");
+  } finally {
+    process.chdir(originalCwd);
+    resetDatabase();
+    if (originalScope === undefined) {
+      delete process.env.KNOWIT_STORAGE_SCOPE;
+    } else {
+      process.env.KNOWIT_STORAGE_SCOPE = originalScope;
+    }
+    if (originalPath === undefined) {
+      delete process.env.KNOWIT_DB_PATH;
+    } else {
+      process.env.KNOWIT_DB_PATH = originalPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("sqlite to jsonl migration command path supports dry run and overwrite protection", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-storage-migrate-"));
+  const sqlitePath = path.join(tempDir, "knowit.db");
+  const knowledgePath = path.join(tempDir, "knowledge.jsonl");
+  const sourcesPath = path.join(tempDir, "sources.json");
+
+  try {
+    const database = new Database(sqlitePath);
+    initializeDatabase(database);
+    const repository = new KnowledgeRepository(database);
+    repository.createEntry({
+      title: "Explicit storage migration",
+      type: "decision",
+      content: "Users can explicitly convert a SQLite knowledge database to JSONL.",
+      body: [{ type: "paragraph", text: "Users can explicitly convert a SQLite knowledge database to JSONL." }],
+      scope: "repo",
+      repo: "knowit",
+      tags: ["migration"],
+      confidence: 1,
+      metadata: {},
+    });
+    database.close();
+
+    const dryRun = migrateSqliteToJsonl({
+      sqlitePath,
+      knowledgePath,
+      sourcesPath,
+      dryRun: true,
+    });
+
+    assert.equal(dryRun.entryCount, 1);
+    assert.equal(dryRun.wroteKnowledge, false);
+    assert.equal(fs.existsSync(knowledgePath), false);
+
+    const migrated = migrateSqliteToJsonl({
+      sqlitePath,
+      knowledgePath,
+      sourcesPath,
+    });
+
+    assert.equal(migrated.entryCount, 1);
+    assert.equal(migrated.wroteKnowledge, true);
+    assert.match(fs.readFileSync(knowledgePath, "utf8"), /"title":"Explicit storage migration"/);
+    assert.throws(
+      () => migrateSqliteToJsonl({ sqlitePath, knowledgePath, sourcesPath }),
+      /already exists/,
+    );
+
+    const forced = migrateSqliteToJsonl({
+      sqlitePath,
+      knowledgePath,
+      sourcesPath,
+      force: true,
+    });
+    assert.equal(forced.entryCount, 1);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 

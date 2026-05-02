@@ -16,8 +16,8 @@ export const sourceShowCommand = (id: string): void => {
   console.log(`Default: ${source.isDefault ? "yes" : "no"}`);
   console.log(`Updated: ${source.updatedAt}`);
 
-  if (source.config.mode === "sqlite") {
-    console.log("Mode: sqlite");
+  if (source.config.mode === "jsonl" || source.config.mode === "sqlite") {
+    console.log(`Mode: ${source.config.mode}`);
     return;
   }
 

@@ -121,7 +121,7 @@ const printPlan = (plan: InstallPlan): void => {
     output.write("- Global install: npm install -g knowit\n");
   }
   if (plan.useNpxForMcp) {
-    output.write("- MCP server command: npx knowit serve\n");
+    output.write("- MCP server command: npx -y knowit@latest serve\n");
   }
 
   if (plan.instructionTargets.length > 0) {

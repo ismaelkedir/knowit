@@ -71,6 +71,65 @@ test("install plan prefers the current instruction-file conventions when files a
   }
 });
 
+test("project MCP config uses latest npx command when npx mode is selected", async () => {
+  const { cwd, cleanup } = createTempProject();
+  const originalCwd = process.cwd();
+
+  try {
+    const plan = createInstallPlan({
+      clients: ["claude"],
+      scope: "project",
+      sourceProvider: "local",
+      migrateMarkdown: false,
+      markdownPaths: [],
+      repo: "knowit",
+      cwd,
+      useNpxForMcp: true,
+    });
+
+    await applyInstallPlan(plan, {
+      cwd,
+      runner: { run() {} },
+    });
+
+    const projectMcpConfig = JSON.parse(fs.readFileSync(path.join(cwd, ".mcp.json"), "utf8")) as {
+      mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+    };
+
+    assert.equal(projectMcpConfig.mcpServers?.knowit?.command, "npx");
+    assert.deepEqual(projectMcpConfig.mcpServers?.knowit?.args, ["-y", "knowit@latest", "serve"]);
+    assert.equal(projectMcpConfig.mcpServers?.knowit?.env, undefined);
+  } finally {
+    process.chdir(originalCwd);
+    resetDatabase();
+    cleanup();
+  }
+});
+
+test("project MCP registrations do not pin KNOWIT_DB_PATH", () => {
+  const { cwd, cleanup } = createTempProject();
+
+  try {
+    const plan = createInstallPlan({
+      clients: ["claude", "codex"],
+      scope: "project",
+      sourceProvider: "local",
+      migrateMarkdown: false,
+      markdownPaths: [],
+      repo: "knowit",
+      cwd,
+      useNpxForMcp: true,
+    });
+
+    for (const registration of plan.mcpRegistrations) {
+      assert.equal(registration.args.includes("KNOWIT_DB_PATH=.knowit/knowit.db"), false);
+      assert.equal(registration.args.includes("KNOWIT_DB_PATH"), false);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
 test("mergeInstructionFile preserves unrelated content and refreshes the managed Knowit block", () => {
   const initial = [
     "# Project Guide",
@@ -94,6 +153,8 @@ test("mergeInstructionFile preserves unrelated content and refreshes the managed
 test("applyInstallPlan installs instructions, registers clients, imports markdown, and keeps local storage working", async () => {
   const { cwd, cleanup } = createTempProject();
   const originalDbPath = process.env.KNOWIT_DB_PATH;
+  const originalStorageScope = process.env.KNOWIT_STORAGE_SCOPE;
+  const originalCwd = process.cwd();
 
   try {
     fs.writeFileSync(path.join(cwd, "ARCHITECTURE.md"), "# Runtime Architecture\nMemoryService is the orchestration boundary.\n");
@@ -138,9 +199,11 @@ test("applyInstallPlan installs instructions, registers clients, imports markdow
     assert.match(codexInstructions, /resolve_source_action/);
     assert.equal(projectMcpConfig.mcpServers?.knowit?.command, "knowit");
     assert.deepEqual(projectMcpConfig.mcpServers?.knowit?.args, ["serve"]);
-    assert.equal(projectMcpConfig.mcpServers?.knowit?.env?.KNOWIT_DB_PATH, ".knowit/knowit.db");
+    assert.equal(projectMcpConfig.mcpServers?.knowit?.env, undefined);
 
-    process.env.KNOWIT_DB_PATH = plan.dbPath;
+    delete process.env.KNOWIT_DB_PATH;
+    process.env.KNOWIT_STORAGE_SCOPE = "project";
+    process.chdir(cwd);
     resetDatabase();
 
     const service = new MemoryService();
@@ -152,7 +215,7 @@ test("applyInstallPlan installs instructions, registers clients, imports markdow
     const directEntry = await service.storeKnowledge({
       title: "Offline fallback",
       type: "note",
-      content: "Direct stores should still land in local SQLite.",
+      content: "Direct stores should still land in local JSONL.",
       scope: "repo",
       repo: "knowit",
       tags: ["install"],
@@ -163,14 +226,22 @@ test("applyInstallPlan installs instructions, registers clients, imports markdow
     const importedEntries = await service.listKnowledge({ source: "local", repo: "knowit", limit: 10 });
 
     assert.equal(directEntry.title, "Offline fallback");
+    assert.ok(fs.existsSync(path.join(cwd, ".knowit", "knowledge.jsonl")));
+    assert.ok(fs.existsSync(path.join(cwd, ".knowit", "sources.json")));
     assert.ok(importedEntries.some((entry) => entry.title === "Runtime Architecture"));
     assert.ok(importedEntries.some((entry) => entry.title === "Offline fallback"));
   } finally {
+    process.chdir(originalCwd);
     resetDatabase();
     if (originalDbPath === undefined) {
       delete process.env.KNOWIT_DB_PATH;
     } else {
       process.env.KNOWIT_DB_PATH = originalDbPath;
+    }
+    if (originalStorageScope === undefined) {
+      delete process.env.KNOWIT_STORAGE_SCOPE;
+    } else {
+      process.env.KNOWIT_STORAGE_SCOPE = originalStorageScope;
     }
     cleanup();
   }

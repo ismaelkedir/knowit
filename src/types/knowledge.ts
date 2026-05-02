@@ -17,11 +17,55 @@ export const knowledgeScopeSchema = z.enum([
   "domain",
 ]);
 
+export const knowledgeContentBlockSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("heading"),
+    level: z.number().int().min(2).max(4).default(2),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("paragraph"),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("list"),
+    style: z.enum(["bullet", "ordered"]).default("bullet"),
+    items: z.array(z.string().min(1)).min(1),
+  }),
+  z.object({
+    type: z.literal("quote"),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("code"),
+    language: z.string().trim().min(1).nullable().optional(),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("callout"),
+    tone: z.enum(["info", "warning", "success"]).default("info"),
+    title: z.string().min(1).nullable().optional(),
+    text: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("link_list"),
+    links: z
+      .array(
+        z.object({
+          label: z.string().min(1),
+          url: z.string().url(),
+        }),
+      )
+      .min(1),
+  }),
+]);
+
 export const knowledgeEntrySchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   type: knowledgeTypeSchema,
   content: z.string().min(1),
+  body: z.array(knowledgeContentBlockSchema).default([]),
   summary: z.string().nullable().optional(),
   scope: knowledgeScopeSchema,
   repo: z.string().nullable(),
@@ -40,6 +84,7 @@ export const knowledgeEntryInputSchema = z
     title: z.string().min(1),
     type: knowledgeTypeSchema,
     content: z.string().min(1),
+    body: z.array(knowledgeContentBlockSchema).default([]),
     summary: z.string().max(300).nullable().optional(),
     scope: knowledgeScopeSchema.default("global"),
     repo: z.string().trim().min(1).nullable().optional(),
@@ -98,6 +143,7 @@ export const storeKnowledgeInputSchema = z
     title: z.string().min(1),
     type: knowledgeTypeSchema,
     content: z.string().min(1),
+    body: z.array(knowledgeContentBlockSchema).default([]),
     summary: z.string().max(300).optional(),
     scope: knowledgeScopeSchema.default("global"),
     repo: z.string().trim().min(1).nullable().optional(),
@@ -167,12 +213,13 @@ export const sourceActionResultSchema = z.object({
 
 export type KnowledgeType = z.infer<typeof knowledgeTypeSchema>;
 export type KnowledgeScope = z.infer<typeof knowledgeScopeSchema>;
+export type KnowledgeContentBlock = z.infer<typeof knowledgeContentBlockSchema>;
 export type KnowledgeEntry = z.infer<typeof knowledgeEntrySchema>;
-export type KnowledgeEntryInput = z.infer<typeof knowledgeEntryInputSchema>;
+export type KnowledgeEntryInput = z.input<typeof knowledgeEntryInputSchema>;
 export type KnowledgeListFilters = z.infer<typeof knowledgeListFiltersSchema>;
 export type KnowledgeSearchFilters = z.infer<typeof knowledgeSearchFiltersSchema>;
 export type ResolveContextInput = z.infer<typeof resolveContextInputSchema>;
 export type ResolveSourceActionInput = z.infer<typeof resolveSourceActionInputSchema>;
-export type StoreKnowledgeInput = z.infer<typeof storeKnowledgeInputSchema>;
+export type StoreKnowledgeInput = z.input<typeof storeKnowledgeInputSchema>;
 export type KnowledgeResult = z.infer<typeof knowledgeResultSchema>;
 export type SourceActionResult = z.infer<typeof sourceActionResultSchema>;

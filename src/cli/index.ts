@@ -16,6 +16,7 @@ import { sourceListCommand } from "./commands/sourceList.js";
 import { sourceShowCommand } from "./commands/sourceShow.js";
 import { importMdCommand } from "./commands/importMd.js";
 import { migrateCommand } from "./commands/migrate.js";
+import { migrateStorageCommand } from "./commands/migrateStorage.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerLogoutCommand } from "./commands/logout.js";
 import { registerWhoamiCommand } from "./commands/whoami.js";
@@ -84,7 +85,7 @@ program
 
 program
   .command("init")
-  .description("Initialize the SQLite database manually")
+  .description("Initialize Knowit storage manually")
   .action(initCommand);
 
 program
@@ -202,6 +203,16 @@ program
   .option("--yes", "Skip confirmation prompt")
   .option("--dry-run", "Preview entries without migrating")
   .action(migrateCommand);
+
+program
+  .command("migrate-storage")
+  .description("Convert a project SQLite knowledge database to JSONL storage")
+  .option("--sqlite-path <path>", "SQLite database to read from (defaults to the current Knowit DB path)")
+  .option("--jsonl-path <path>", "Knowledge JSONL file to write (defaults to .knowit/knowledge.jsonl)")
+  .option("--sources-path <path>", "Sources JSON file to write (defaults to .knowit/sources.json)")
+  .option("--force", "Overwrite existing JSONL/source files")
+  .option("--dry-run", "Preview migration without writing files")
+  .action(migrateStorageCommand);
 
 const cloudProgram = program.command("cloud").description("Manage Knowit Cloud access");
 
