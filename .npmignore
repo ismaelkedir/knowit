@@ -1,2 +1,4 @@
 dist/tests/
+dist/benchmark/
+dist/cli/commands/benchmark*
 *.tsbuildinfo
