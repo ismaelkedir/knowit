@@ -3,7 +3,10 @@ dist/
 .env*
 !.env.example
 .claude/
-.knowit/
+.knowit/sources.json
+.knowit/knowit.db
+.knowit/knowit.db-shm
+.knowit/knowit.db-wal
 knowit.db
 knowit.db-shm
 knowit.db-wal
