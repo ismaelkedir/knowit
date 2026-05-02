@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   title TEXT NOT NULL,
   type TEXT NOT NULL,
   content TEXT NOT NULL,
+  body TEXT,
   summary TEXT,
   scope TEXT NOT NULL,
   repo TEXT,

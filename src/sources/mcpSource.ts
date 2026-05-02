@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type {
+  KnowledgeContentBlock,
   KnowledgeEntry,
   KnowledgeListFilters,
   KnowledgeResult,
@@ -51,6 +52,7 @@ const normalizeRemoteEntry = (
     : {};
   const now = new Date().toISOString();
   const scoreValue = typeof raw.score === "number" ? raw.score : 0.5;
+  const body = Array.isArray(raw.body) ? (raw.body as KnowledgeContentBlock[]) : fallback.body ?? [];
 
   return {
     id: typeof raw.id === "string" ? raw.id : randomUUID(),
@@ -65,6 +67,7 @@ const normalizeRemoteEntry = (
         ? raw.type
         : fallback.type ?? "note",
     content: typeof raw.content === "string" ? raw.content : fallback.content ?? "",
+    body,
     scope:
       raw.scope === "global" ||
       raw.scope === "team" ||
@@ -138,7 +141,7 @@ export class McpMemorySource implements MemorySourceProvider {
       arguments: input,
     });
     const payload = extractToolPayload(result);
-    const normalized = normalizeRemoteEntry(this.definition, payload, input);
+    const normalized = normalizeRemoteEntry(this.definition, payload, { ...input, body: [] });
     const { sourceId: _sourceId, sourceKind: _sourceKind, sourceName: _sourceName, score: _score, matchedOn: _matchedOn, ...entry } = normalized;
     return { ...entry, content: entry.content ?? input.content };
   }
