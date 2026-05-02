@@ -7,6 +7,7 @@ import type {
   ResolveContextInput,
   StoreKnowledgeInput,
 } from "../types/knowledge.js";
+import { storeKnowledgeInputSchema } from "../types/knowledge.js";
 import type { KnowledgeSource } from "../types/source.js";
 import type { MemorySourceProvider } from "./base.js";
 import { logger } from "../utils/logger.js";
@@ -104,16 +105,17 @@ export class SqliteMemorySource implements MemorySourceProvider {
   }
 
   async storeKnowledge(input: StoreKnowledgeInput): Promise<KnowledgeEntry> {
+    const parsedInput = storeKnowledgeInputSchema.parse(input);
     const embedding = await tryGenerateEmbedding(
       this.embeddingGenerator,
-      buildEmbeddingInput(input.title, input.content, input.tags),
+      buildEmbeddingInput(parsedInput.title, parsedInput.content, parsedInput.tags),
       "store",
     );
 
     return this.repository.createEntry({
-      ...input,
-      repo: input.repo ?? null,
-      domain: input.domain ?? null,
+      ...parsedInput,
+      repo: parsedInput.repo ?? null,
+      domain: parsedInput.domain ?? null,
       embedding,
     });
   }

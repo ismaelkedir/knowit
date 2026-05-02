@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const sourceKindSchema = z.enum(["sqlite", "mcp", "route", "cloud"]);
+export const sourceKindSchema = z.enum(["jsonl", "sqlite", "mcp", "route", "cloud"]);
 export const knownSourceProviderSchema = z.enum(["local", "notion"]);
 
 export const sourceToolMapSchema = z.object({
@@ -11,6 +11,10 @@ export const sourceToolMapSchema = z.object({
 
 export const sqliteSourceConfigSchema = z.object({
   mode: z.literal("sqlite"),
+});
+
+export const jsonlSourceConfigSchema = z.object({
+  mode: z.literal("jsonl"),
 });
 
 export const mcpSourceConfigSchema = z.object({
@@ -39,6 +43,7 @@ export const cloudSourceConfigSchema = z.object({
 });
 
 export const sourceConfigSchema = z.discriminatedUnion("mode", [
+  jsonlSourceConfigSchema,
   sqliteSourceConfigSchema,
   mcpSourceConfigSchema,
   routeSourceConfigSchema,

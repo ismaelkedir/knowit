@@ -1,5 +1,8 @@
 import { KnowledgeRepository } from "../db/knowledgeRepo.js";
 import { SourceRepository } from "../db/sourceRepo.js";
+import { getStorageScope } from "../db/database.js";
+import { JsonlKnowledgeRepository } from "../storage/jsonlKnowledgeRepo.js";
+import { JsonlSourceRepository } from "../storage/jsonlSourceRepo.js";
 import { loadCredentials } from "../utils/credentials.js";
 import { isKnowitCloudEnabled } from "../utils/cloudAvailability.js";
 import {
@@ -39,9 +42,9 @@ export interface KnowledgeStats {
 }
 
 export class MemoryService {
-  private readonly knowledgeRepository: KnowledgeRepository;
+  private readonly knowledgeRepository: KnowledgeRepository | JsonlKnowledgeRepository;
 
-  private readonly sourceRepository: SourceRepository;
+  private readonly sourceRepository: SourceRepository | JsonlSourceRepository;
 
   private readonly sourceRegistry: SourceRegistry;
 
@@ -51,12 +54,22 @@ export class MemoryService {
     sourceRepository?: SourceRepository;
     sourceRegistry?: SourceRegistry;
   } = {}) {
-    const knowledgeRepository = options.knowledgeRepository ?? new KnowledgeRepository(options.database);
-    const sourceRepository = options.sourceRepository ?? new SourceRepository(options.database);
+    const useProjectJsonl =
+      getStorageScope() === "project" &&
+      !options.database &&
+      !options.knowledgeRepository &&
+      !options.sourceRepository;
+    const knowledgeRepository = options.knowledgeRepository ??
+      (useProjectJsonl ? new JsonlKnowledgeRepository() : new KnowledgeRepository(options.database));
+    const sourceRepository = options.sourceRepository ??
+      (useProjectJsonl ? new JsonlSourceRepository() : new SourceRepository(options.database));
 
     this.knowledgeRepository = knowledgeRepository;
     this.sourceRepository = sourceRepository;
-    this.sourceRegistry = options.sourceRegistry ?? new SourceRegistry(knowledgeRepository);
+    this.sourceRegistry = options.sourceRegistry ?? new SourceRegistry({
+      sqliteRepository: knowledgeRepository instanceof KnowledgeRepository ? knowledgeRepository : undefined,
+      jsonlRepository: knowledgeRepository instanceof JsonlKnowledgeRepository ? knowledgeRepository : undefined,
+    });
   }
 
   private cloudSourceBootstrapped = false;
@@ -228,7 +241,7 @@ export class MemoryService {
     this.init();
     const source = input.source ? this.getSelectedSource(input.source) : this.getPreferredDirectSource();
 
-    if (source.kind === "sqlite") {
+    if (source.kind === "sqlite" || source.kind === "jsonl") {
       return this.knowledgeRepository.getEntryById(input.id);
     }
 

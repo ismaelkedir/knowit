@@ -7,8 +7,8 @@ export const sourceListCommand = (): void => {
 
   for (const source of sources) {
     const detail =
-      source.config.mode === "sqlite"
-        ? "mode=sqlite"
+      source.config.mode === "jsonl" || source.config.mode === "sqlite"
+        ? `mode=${source.config.mode}`
         : source.config.mode === "mcp"
           ? `mode=mcp transport=${source.config.transport}`
           : source.config.mode === "route"

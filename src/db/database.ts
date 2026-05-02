@@ -11,6 +11,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectDatabaseDirectory = ".knowit";
 const databaseFileName = "knowit.db";
+const jsonlFileName = "knowledge.jsonl";
+const sourceConfigFileName = "sources.json";
 
 export type StorageScope = "project" | "global" | "custom";
 
@@ -20,6 +22,7 @@ CREATE TABLE IF NOT EXISTS knowledge_entries (
   title TEXT NOT NULL,
   type TEXT NOT NULL,
   content TEXT NOT NULL,
+  body TEXT,
   summary TEXT,
   scope TEXT NOT NULL,
   repo TEXT,
@@ -84,6 +87,10 @@ const applyCompatibilityMigrations = (database: Database.Database): void => {
     database.exec("ALTER TABLE knowledge_entries ADD COLUMN summary TEXT");
   }
 
+  if (hasColumn(database, "knowledge_entries", "body") === false) {
+    database.exec("ALTER TABLE knowledge_entries ADD COLUMN body TEXT");
+  }
+
   if (hasColumn(database, "knowledge_entries", "url") === false) {
     database.exec("ALTER TABLE knowledge_entries ADD COLUMN url TEXT");
   }
@@ -133,6 +140,15 @@ export const getDatabasePath = (cwd: string = process.cwd()): string => {
 
   return path.join(cwd, projectDatabaseDirectory, databaseFileName);
 };
+
+export const getJsonlKnowledgePath = (cwd: string = process.cwd()): string =>
+  path.join(cwd, projectDatabaseDirectory, jsonlFileName);
+
+export const getJsonlSourcesPath = (cwd: string = process.cwd()): string =>
+  path.join(cwd, projectDatabaseDirectory, sourceConfigFileName);
+
+export const getStoragePath = (cwd: string = process.cwd()): string =>
+  getStorageScope() === "project" ? getJsonlKnowledgePath(cwd) : getDatabasePath(cwd);
 
 let databaseInstance: Database.Database | null = null;
 

@@ -36,7 +36,7 @@ Instead of re-explaining architecture rules, naming conventions, and past decisi
 
 - Give every agent session the same project context before it starts changing code.
 - Store engineering knowledge in a structured, queryable memory layer instead of scattered prompts and notes.
-- Share conventions and decisions across teammates with one local or shared SQLite database.
+- Share conventions and decisions across teammates through git-friendly project JSONL or an optional shared SQLite database.
 - Work across Claude Code, Codex, and other MCP-compatible agents without tying memory to one tool.
 - Store structured knowledge: rules, architecture, patterns, decisions, conventions, and notes.
 
@@ -49,6 +49,7 @@ That means memory is stored with structure such as:
 - entry type: `rule`, `architecture`, `pattern`, `decision`, `convention`, `note`
 - scope: `global`, `team`, `repo`, `domain`
 - metadata: tags, URLs, confidence, and source information
+- renderable body blocks: headings, paragraphs, lists, quotes, code, callouts, and link lists
 
 This makes it easier for agents to retrieve only the context that matters for the current task, such as:
 
@@ -56,7 +57,7 @@ This makes it easier for agents to retrieve only the context that matters for th
 - domain-specific conventions before refactoring a subsystem
 - team-wide decisions before introducing a new pattern
 
-The default local storage is SQLite, which gives Knowit a simple local-first setup while keeping memory queryable, shareable, and independent from any single model vendor or editor.
+The default project storage is `.knowit/knowledge.jsonl`, a line-delimited JSON file that is readable, reviewable, and friendly to git diffs. Global and custom storage scopes can still use SQLite when you want a private local database or a shared database path.
 
 ## Install
 
@@ -78,7 +79,7 @@ npx knowit install
 
 `npx knowit install` is the main setup flow. It can:
 
-- initialize the local database
+- initialize the local memory store
 - register the Knowit MCP server with supported clients
 - update agent instruction files
 - connect a preferred source
@@ -164,6 +165,10 @@ knowit cloud logout
 
 # Import existing markdown knowledge
 knowit import-md --yes
+
+# Convert an existing project SQLite database to JSONL
+knowit migrate-storage --sqlite-path .knowit/knowit.db --dry-run
+knowit migrate-storage --sqlite-path .knowit/knowit.db
 ```
 
 ## MCP Tools
@@ -200,11 +205,22 @@ knowit import-md --yes
 | `repo` | Specific to one repository |
 | `domain` | Specific to a bounded area in one repo |
 
-Entries also support tags, optional URLs, metadata, and confidence scores.
+Entries also support tags, optional URLs, metadata, confidence scores, and a structured `body` field for reader UIs. `content` remains the plain searchable text; `body` is the renderable version. When `body` is omitted, Knowit derives paragraph blocks from `content`.
 
 ## Shared Team Memory
 
-Knowit is local-first, but it can still be shared across a team by pointing everyone at the same SQLite database path.
+Knowit is local-first. In project scope, `.knowit/knowledge.jsonl` is the canonical memory file and can be reviewed in version control like source code.
+
+Existing projects with `.knowit/knowit.db` are migrated automatically on first project-scope initialization when `.knowit/knowledge.jsonl` does not exist. You can also run the conversion explicitly:
+
+```bash
+knowit migrate-storage --sqlite-path .knowit/knowit.db --dry-run
+knowit migrate-storage --sqlite-path .knowit/knowit.db
+```
+
+The command writes `.knowit/knowledge.jsonl` and `.knowit/sources.json`. It refuses to overwrite existing targets unless you pass `--force`.
+
+For private global memory or a shared database outside the repo, point everyone at the same SQLite database path.
 
 ```bash
 KNOWIT_DB_PATH=/shared/team/knowit.db npx knowit install --scope global --client claude
@@ -233,16 +249,16 @@ knowit source connect notion
 
 | Variable | Description |
 |---|---|
-| `KNOWIT_DB_PATH` | Path to the SQLite database |
+| `KNOWIT_DB_PATH` | Path to the SQLite database for `global` or `custom` storage |
 | `KNOWIT_STORAGE_SCOPE` | `project`, `global`, or `custom` |
 | `OPENAI_API_KEY` | Enables semantic search via embeddings |
 | `KNOWIT_LOG_LEVEL` | `debug`, `info`, `warn`, or `error` |
 
-### Default database locations
+### Default storage locations
 
 | Scope | Path |
 |---|---|
-| `project` | `.knowit/knowit.db` inside the current repo |
+| `project` | `.knowit/knowledge.jsonl` inside the current repo |
 | `global` | `~/.knowit/knowit.db` |
 | `custom` | Value of `KNOWIT_DB_PATH` |
 

@@ -300,11 +300,13 @@ export const buildMarkdownImportPlan = (filePath: string, cwd: string): Markdown
 const buildMcpRegistrationPlan = (
   client: SupportedClient,
   scope: InstallScope,
-  dbPath: string,
+  dbPath: string | null,
   useNpx: boolean,
 ): ClientRegistrationPlan => {
   const serverCommand = useNpx ? "npx" : "knowit";
-  const serverArgs = useNpx ? ["knowit", "serve"] : ["serve"];
+  const serverArgs = useNpx ? ["-y", "knowit@latest", "serve"] : ["serve"];
+  const envArgs = scope === "global" && dbPath ? ["-e", `KNOWIT_DB_PATH=${dbPath}`] : [];
+  const codexEnvArgs = scope === "global" && dbPath ? ["--env", `KNOWIT_DB_PATH=${dbPath}`] : [];
 
   if (client === "claude") {
     const claudeScope = scope === "project" ? "project" : "user";
@@ -319,8 +321,7 @@ const buildMcpRegistrationPlan = (
         "knowit",
         serverCommand,
         ...serverArgs,
-        "-e",
-        `KNOWIT_DB_PATH=${dbPath}`,
+        ...envArgs,
       ],
     };
   }
@@ -328,7 +329,7 @@ const buildMcpRegistrationPlan = (
   return {
     client,
     command: "codex",
-    args: ["mcp", "add", "knowit", "--env", `KNOWIT_DB_PATH=${dbPath}`, "--", serverCommand, ...serverArgs],
+    args: ["mcp", "add", "knowit", ...codexEnvArgs, "--", serverCommand, ...serverArgs],
   };
 };
 
@@ -351,10 +352,7 @@ const mergeProjectMcpConfig = (existingContents: string | null, useNpx: boolean)
         knowit: {
           type: "stdio",
           command: useNpx ? "npx" : "knowit",
-          args: useNpx ? ["knowit", "serve"] : ["serve"],
-          env: {
-            KNOWIT_DB_PATH: ".knowit/knowit.db",
-          },
+          args: useNpx ? ["-y", "knowit@latest", "serve"] : ["serve"],
         },
       },
     },
@@ -386,7 +384,7 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
   }
   if (selections.sourceProvider !== "local") {
     warnings.push(
-      "External routed sources become the default for resolve_source_action, while direct Knowit storage still falls back to local SQLite.",
+      "External routed sources become the default for resolve_source_action, while direct Knowit storage still falls back to the local source.",
     );
   }
 
@@ -405,7 +403,7 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
       buildMcpRegistrationPlan(
         client,
         selections.scope,
-        getInstallDatabasePath(selections.scope, selections.cwd),
+        selections.scope === "global" ? getInstallDatabasePath(selections.scope, selections.cwd) : null,
         useNpxForMcp,
       ),
     ),
@@ -436,8 +434,16 @@ export const applyInstallPlan = async (
   }
 
   const originalDbPath = process.env.KNOWIT_DB_PATH;
+  const originalStorageScope = process.env.KNOWIT_STORAGE_SCOPE;
+  const originalCwd = process.cwd();
 
-  process.env.KNOWIT_DB_PATH = plan.dbPath;
+  process.chdir(options.cwd);
+  process.env.KNOWIT_STORAGE_SCOPE = plan.scope;
+  if (plan.scope === "global") {
+    process.env.KNOWIT_DB_PATH = plan.dbPath;
+  } else {
+    delete process.env.KNOWIT_DB_PATH;
+  }
   resetDatabase();
 
   try {
@@ -515,11 +521,17 @@ export const applyInstallPlan = async (
       globalInstallSucceeded,
     };
   } finally {
+    process.chdir(originalCwd);
     resetDatabase();
     if (originalDbPath === undefined) {
       delete process.env.KNOWIT_DB_PATH;
     } else {
       process.env.KNOWIT_DB_PATH = originalDbPath;
+    }
+    if (originalStorageScope === undefined) {
+      delete process.env.KNOWIT_STORAGE_SCOPE;
+    } else {
+      process.env.KNOWIT_STORAGE_SCOPE = originalStorageScope;
     }
   }
 };

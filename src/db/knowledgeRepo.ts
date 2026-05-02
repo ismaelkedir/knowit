@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import { z } from "zod";
 import { getDatabase, initializeDatabase } from "./database.js";
 import {
   rankEntriesBySimilarity,
@@ -7,23 +8,28 @@ import {
   type RankedKnowledgeEntry,
 } from "../search/semanticSearch.js";
 import {
+  knowledgeContentBlockSchema,
   knowledgeEntryInputSchema,
   knowledgeEntrySchema,
   knowledgeListFiltersSchema,
   knowledgeSearchFiltersSchema,
   resolveContextInputSchema,
   type KnowledgeEntry,
+  type KnowledgeContentBlock,
   type KnowledgeEntryInput,
   type KnowledgeListFilters,
   type KnowledgeSearchFilters,
   type ResolveContextInput,
 } from "../types/knowledge.js";
 
+type ParsedKnowledgeEntryInput = z.output<typeof knowledgeEntryInputSchema>;
+
 interface KnowledgeRow {
   id: string;
   title: string;
   type: string;
   content: string;
+  body: string | null;
   summary: string | null;
   scope: string;
   repo: string | null;
@@ -66,12 +72,30 @@ const parseMetadata = (rawMetadata: string): Record<string, unknown> => {
     : {};
 };
 
+const contentToBody = (content: string): KnowledgeContentBlock[] =>
+  content
+    .split(/\n{2,}/)
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text) => ({ type: "paragraph", text }));
+
+const parseBody = (rawBody: string | null, content: string): KnowledgeContentBlock[] => {
+  if (!rawBody) {
+    return contentToBody(content);
+  }
+
+  const parsed = JSON.parse(rawBody) as unknown;
+  const body = z.array(knowledgeContentBlockSchema).safeParse(parsed);
+  return body.success && body.data.length > 0 ? body.data : contentToBody(content);
+};
+
 const mapRowToEntry = (row: KnowledgeRow): KnowledgeEntry =>
   knowledgeEntrySchema.parse({
     id: row.id,
     title: row.title,
     type: row.type,
     content: row.content,
+    body: parseBody(row.body, row.content),
     summary: row.summary,
     scope: row.scope,
     repo: row.repo,
@@ -173,6 +197,7 @@ export class KnowledgeRepository {
       title: parsedInput.title,
       type: parsedInput.type,
       content: parsedInput.content,
+      body: parsedInput.body.length > 0 ? parsedInput.body : contentToBody(parsedInput.content),
       summary: parsedInput.summary ?? null,
       scope: parsedInput.scope,
       repo: parsedInput.repo ?? null,
@@ -190,10 +215,10 @@ export class KnowledgeRepository {
       .prepare(
         `
           INSERT INTO knowledge_entries (
-            id, title, type, content, summary, scope, repo, domain, tags, embedding, created_at, updated_at,
+            id, title, type, content, body, summary, scope, repo, domain, tags, embedding, created_at, updated_at,
             confidence, url, metadata
           ) VALUES (
-            @id, @title, @type, @content, @summary, @scope, @repo, @domain, @tags, @embedding, @createdAt,
+            @id, @title, @type, @content, @body, @summary, @scope, @repo, @domain, @tags, @embedding, @createdAt,
             @updatedAt, @confidence, @url, @metadata
           )
         `,
@@ -203,6 +228,7 @@ export class KnowledgeRepository {
         title: entry.title,
         type: entry.type,
         content: entry.content,
+        body: JSON.stringify(entry.body),
         summary: entry.summary,
         scope: entry.scope,
         repo: entry.repo,
@@ -243,7 +269,7 @@ export class KnowledgeRepository {
     return row ? mapRowToEntry(row) : null;
   }
 
-  private updateEntryById(id: string, input: KnowledgeEntryInput): KnowledgeEntry {
+  private updateEntryById(id: string, input: ParsedKnowledgeEntryInput): KnowledgeEntry {
     const now = new Date().toISOString();
 
     this.db
@@ -251,6 +277,7 @@ export class KnowledgeRepository {
         `
         UPDATE knowledge_entries
         SET content = @content,
+            body = @body,
             summary = @summary,
             tags = @tags,
             embedding = @embedding,
@@ -264,6 +291,7 @@ export class KnowledgeRepository {
       .run({
         id,
         content: input.content,
+        body: JSON.stringify(input.body.length > 0 ? input.body : contentToBody(input.content)),
         summary: input.summary ?? null,
         tags: serializeTags(input.tags),
         embedding: input.embedding ? JSON.stringify(input.embedding) : null,
