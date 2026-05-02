@@ -8,9 +8,21 @@
     "knowit": "dist/cli/index.js"
   },
   "files": [
-    "dist/",
+    "dist/cli/",
+    "dist/db/",
+    "dist/install/",
+    "dist/search/",
+    "dist/server/",
+    "dist/services/",
+    "dist/sources/",
+    "dist/storage/",
+    "dist/types/",
+    "dist/utils/",
     "!dist/tests/",
     "!dist/tests/**",
+    "!dist/benchmark/",
+    "!dist/benchmark/**",
+    "!dist/cli/commands/benchmark*",
     "README.md",
     "LICENSE"
   ],
@@ -19,6 +31,8 @@
     "start": "node dist/server/mcpServer.js",
     "cli": "node dist/cli/index.js",
     "test": "npm run build && node --test dist/tests/**/*.test.js",
+    "prune:package": "node scripts/prune-package-artifacts.mjs",
+    "prepack": "npm run build && npm run prune:package",
     "pack:smoke": "npm pack --dry-run --cache /tmp/knowit-npm-cache",
     "prepublishOnly": "npm run build && npm test"
   },
