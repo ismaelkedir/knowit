@@ -8,7 +8,7 @@ type TimedCommand = Command & {
 
 export const shouldTimeCommand = (command: Command): boolean => {
   const name = command.name();
-  return name.length > 0 && name !== "serve";
+  return name.length > 0 && name !== "serve" && name !== "preview";
 };
 
 export const markCommandStart = (command: Command): void => {
