@@ -96,16 +96,12 @@ export class JsonlKnowledgeRepository {
   createEntry(input: KnowledgeEntryInput): KnowledgeEntry {
     const parsedInput = knowledgeEntryInputSchema.parse(input);
     const entries = this.readEntries();
-    const existingIndex = entries.findIndex(
-      (entry) =>
-        entry.title.toLowerCase() === parsedInput.title.toLowerCase() &&
-        entry.type === parsedInput.type &&
-        entry.scope === parsedInput.scope &&
-        (entry.repo ?? "") === (parsedInput.repo ?? "") &&
-        (entry.domain ?? "") === (parsedInput.domain ?? ""),
-    );
+    const existingIndex = parsedInput.id
+      ? this.findEntryIndexById(entries, parsedInput.id)
+      : this.findEntryIndexByIdentity(entries, parsedInput) ??
+        this.findSingleEntryIndexByPortableIdentity(entries, parsedInput);
 
-    if (existingIndex >= 0) {
+    if (existingIndex !== null) {
       const updated = this.buildUpdatedEntry(entries[existingIndex]!, parsedInput);
       entries[existingIndex] = updated;
       this.writeEntries(entries);
@@ -114,7 +110,7 @@ export class JsonlKnowledgeRepository {
 
     const now = new Date().toISOString();
     const entry = knowledgeEntrySchema.parse({
-      id: randomUUID(),
+      id: parsedInput.id ?? randomUUID(),
       title: parsedInput.title,
       type: parsedInput.type,
       content: parsedInput.content,
@@ -206,9 +202,14 @@ export class JsonlKnowledgeRepository {
   private buildUpdatedEntry(existing: KnowledgeEntry, input: ParsedKnowledgeEntryInput): KnowledgeEntry {
     return knowledgeEntrySchema.parse({
       ...existing,
+      title: input.title,
+      type: input.type,
       content: input.content,
       body: input.body.length > 0 ? input.body : contentToBody(input.content),
       summary: input.summary ?? null,
+      scope: input.scope,
+      repo: input.repo ?? null,
+      domain: input.domain ?? null,
       tags: input.tags,
       embedding: null,
       confidence: input.confidence,
@@ -216,6 +217,43 @@ export class JsonlKnowledgeRepository {
       metadata: input.metadata,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  private findEntryIndexByIdentity(
+    entries: KnowledgeEntry[],
+    input: ParsedKnowledgeEntryInput,
+  ): number | null {
+    const index = entries.findIndex(
+      (entry) =>
+        entry.title.toLowerCase() === input.title.toLowerCase() &&
+        entry.type === input.type &&
+        entry.scope === input.scope &&
+        (entry.repo ?? "") === (input.repo ?? "") &&
+        (entry.domain ?? "") === (input.domain ?? ""),
+    );
+
+    return index >= 0 ? index : null;
+  }
+
+  private findEntryIndexById(entries: KnowledgeEntry[], id: string): number | null {
+    const index = entries.findIndex((entry) => entry.id === id);
+    return index >= 0 ? index : null;
+  }
+
+  private findSingleEntryIndexByPortableIdentity(
+    entries: KnowledgeEntry[],
+    input: ParsedKnowledgeEntryInput,
+  ): number | null {
+    const matches = entries
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) =>
+        entry.title.toLowerCase() === input.title.toLowerCase() &&
+        entry.type === input.type &&
+        ((entry.repo ?? "") === (input.repo ?? "") || entry.repo === null || !input.repo) &&
+        ((entry.domain ?? "") === (input.domain ?? "") || entry.domain === null || !input.domain),
+      );
+
+    return matches.length === 1 ? matches[0]!.index : null;
   }
 
   private readEntries(): KnowledgeEntry[] {

@@ -179,13 +179,20 @@ export class KnowledgeRepository {
   createEntry(input: KnowledgeEntryInput): KnowledgeEntry {
     const parsedInput = knowledgeEntryInputSchema.parse(input);
 
-    const existing = this.findEntryByIdentity(
-      parsedInput.title,
-      parsedInput.type,
-      parsedInput.scope,
-      parsedInput.repo ?? null,
-      parsedInput.domain ?? null,
-    );
+    const existing = parsedInput.id
+      ? this.getEntryById(parsedInput.id)
+      : this.findEntryByIdentity(
+          parsedInput.title,
+          parsedInput.type,
+          parsedInput.scope,
+          parsedInput.repo ?? null,
+          parsedInput.domain ?? null,
+        ) ?? this.findSingleEntryByPortableIdentity(
+          parsedInput.title,
+          parsedInput.type,
+          parsedInput.repo ?? null,
+          parsedInput.domain ?? null,
+        );
 
     if (existing) {
       return this.updateEntryById(existing.id, parsedInput);
@@ -193,7 +200,7 @@ export class KnowledgeRepository {
 
     const now = new Date().toISOString();
     const entry: KnowledgeEntry = knowledgeEntrySchema.parse({
-      id: randomUUID(),
+      id: parsedInput.id ?? randomUUID(),
       title: parsedInput.title,
       type: parsedInput.type,
       content: parsedInput.content,
@@ -269,6 +276,28 @@ export class KnowledgeRepository {
     return row ? mapRowToEntry(row) : null;
   }
 
+  private findSingleEntryByPortableIdentity(
+    title: string,
+    type: string,
+    repo: string | null,
+    domain: string | null,
+  ): KnowledgeEntry | null {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT * FROM knowledge_entries
+        WHERE lower(title) = lower(?)
+          AND type = ?
+          AND (COALESCE(repo, '') = COALESCE(?, '') OR repo IS NULL OR ? IS NULL)
+          AND (COALESCE(domain, '') = COALESCE(?, '') OR domain IS NULL OR ? IS NULL)
+        LIMIT 2
+      `,
+      )
+      .all(title, type, repo, repo, domain, domain) as KnowledgeRow[];
+
+    return rows.length === 1 ? mapRowToEntry(rows[0]!) : null;
+  }
+
   private updateEntryById(id: string, input: ParsedKnowledgeEntryInput): KnowledgeEntry {
     const now = new Date().toISOString();
 
@@ -276,9 +305,14 @@ export class KnowledgeRepository {
       .prepare(
         `
         UPDATE knowledge_entries
-        SET content = @content,
+        SET title = @title,
+            type = @type,
+            content = @content,
             body = @body,
             summary = @summary,
+            scope = @scope,
+            repo = @repo,
+            domain = @domain,
             tags = @tags,
             embedding = @embedding,
             confidence = @confidence,
@@ -290,9 +324,14 @@ export class KnowledgeRepository {
       )
       .run({
         id,
+        title: input.title,
+        type: input.type,
         content: input.content,
         body: JSON.stringify(input.body.length > 0 ? input.body : contentToBody(input.content)),
         summary: input.summary ?? null,
+        scope: input.scope,
+        repo: input.repo ?? null,
+        domain: input.domain ?? null,
         tags: serializeTags(input.tags),
         embedding: input.embedding ? JSON.stringify(input.embedding) : null,
         confidence: input.confidence,

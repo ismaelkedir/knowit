@@ -11,6 +11,7 @@ import { shouldCheckForUpdates } from "../cli/updateNotifier.js";
 import { SqliteMemorySource } from "../sources/sqliteSource.js";
 import { MemoryService } from "../services/memoryService.js";
 import { migrateSqliteToJsonl } from "../storage/sqliteToJsonlMigration.js";
+import { JsonlKnowledgeRepository } from "../storage/jsonlKnowledgeRepo.js";
 import { storeKnowledgeInputSchema } from "../types/knowledge.js";
 import type { KnowledgeSource } from "../types/source.js";
 
@@ -686,6 +687,121 @@ test("storing an entry with the same logical identity updates it instead of crea
     assert.equal(allEntries.length, 1, "no duplicate should be created");
   } finally {
     cleanup();
+  }
+});
+
+test("storing an entry with the same title and type can move scopes instead of duplicating it", async () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const source = new SqliteMemorySource(localSource, knowledgeRepository, failingEmbeddingGenerator);
+
+    const first = await source.storeKnowledge({
+      type: "decision",
+      title: "Project description",
+      content: "Knowit stores durable context for one local project.",
+      scope: "global",
+      tags: ["project"],
+      confidence: 0.8,
+      metadata: {},
+      source: "local",
+    });
+
+    const second = await source.storeKnowledge({
+      type: "decision",
+      title: "Project description",
+      content: "Knowit stores durable context for the knowit repository.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["project", "repo"],
+      confidence: 1,
+      metadata: {},
+      source: "local",
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(second.scope, "repo");
+    assert.equal(second.repo, "knowit");
+    assert.equal(second.content, "Knowit stores durable context for the knowit repository.");
+
+    const allEntries = await source.listKnowledge({ repo: "knowit", limit: 10 });
+    assert.equal(allEntries.length, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test("storing an entry by id updates its title and scope", () => {
+  const { database, cleanup } = createTestDatabase();
+
+  try {
+    const knowledgeRepository = new KnowledgeRepository(database);
+    const first = knowledgeRepository.createEntry({
+      type: "decision",
+      title: "Old decision title",
+      content: "Use the old project scope.",
+      scope: "global",
+      tags: ["project"],
+      confidence: 0.7,
+      metadata: {},
+    });
+
+    const second = knowledgeRepository.createEntry({
+      id: first.id,
+      type: "decision",
+      title: "Project scope decision",
+      content: "Use repository scope for project-specific memory.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["project", "scope"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(second.title, "Project scope decision");
+    assert.equal(second.scope, "repo");
+    assert.equal(second.repo, "knowit");
+    assert.equal(knowledgeRepository.listEntries({ repo: "knowit", limit: 10 }).length, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test("JSONL storage updates an entry by id", () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-jsonl-update-"));
+
+  try {
+    const repository = new JsonlKnowledgeRepository(path.join(tempDir, "knowledge.jsonl"));
+    const first = repository.createEntry({
+      type: "decision",
+      title: "Old project description",
+      content: "Knowit only appends project descriptions.",
+      scope: "global",
+      tags: ["project"],
+      confidence: 0.7,
+      metadata: {},
+    });
+
+    const second = repository.createEntry({
+      id: first.id,
+      type: "decision",
+      title: "Project description",
+      content: "Knowit updates existing project descriptions when the caller provides the entry id.",
+      scope: "repo",
+      repo: "knowit",
+      tags: ["project", "repo"],
+      confidence: 1,
+      metadata: {},
+    });
+
+    assert.equal(second.id, first.id);
+    assert.equal(second.title, "Project description");
+    assert.equal(second.scope, "repo");
+    assert.equal(repository.listEntries({ repo: "knowit", limit: 10 }).length, 1);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
