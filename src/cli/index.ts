@@ -17,6 +17,7 @@ import { sourceShowCommand } from "./commands/sourceShow.js";
 import { importMdCommand } from "./commands/importMd.js";
 import { migrateCommand } from "./commands/migrate.js";
 import { migrateStorageCommand } from "./commands/migrateStorage.js";
+import { previewCommand } from "./commands/preview.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerLogoutCommand } from "./commands/logout.js";
 import { registerWhoamiCommand } from "./commands/whoami.js";
@@ -71,9 +72,17 @@ program
   });
 
 program
+  .command("preview")
+  .description("Open a read-only local browser for Knowit memory")
+  .option("--host <host>", "Host to bind", "127.0.0.1")
+  .option("--port <port>", "Port to bind (defaults to 4077 with fallback)")
+  .option("--no-open", "Print the preview URL without opening a browser")
+  .action(previewCommand);
+
+program
   .command("install")
   .description("Install Knowit into AI clients and initialize storage if needed")
-  .option("--client <client>", "Target client: claude, codex, or both")
+  .option("--client <client>", "Target client: claude, codex, cursor, windsurf, vscode, gemini, kiro, cline, continue, zed, jetbrains, both, or comma-separated")
   .option("--scope <scope>", "Install scope: project or global")
   .option("--source <source>", "Preferred source: local or notion")
   .option("--mcp-server-name <mcpServerName>", "Downstream MCP server name for routed sources like notion")

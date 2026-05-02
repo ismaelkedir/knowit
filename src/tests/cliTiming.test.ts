@@ -14,6 +14,7 @@ test("shouldTimeCommand skips serve and times normal commands", () => {
   assert.equal(shouldTimeCommand(new Command("search")), true);
   assert.equal(shouldTimeCommand(new Command("list")), true);
   assert.equal(shouldTimeCommand(new Command("serve")), false);
+  assert.equal(shouldTimeCommand(new Command("preview")), false);
 });
 
 test("formatElapsedMs renders milliseconds and seconds clearly", () => {
