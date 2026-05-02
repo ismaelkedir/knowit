@@ -6,7 +6,7 @@ Structured memory for AI coding agents.
 [![license](https://img.shields.io/github/license/ismaelkedir/knowit)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/ismaelkedir/knowit?style=social)](https://github.com/ismaelkedir/knowit)
 
-Knowit is an MCP server and CLI that gives Claude Code, Codex, and other MCP-compatible agents a durable, queryable memory layer for your project.
+Knowit is an MCP server and CLI that gives Claude Code, Codex, Cursor, Windsurf, VS Code, Gemini CLI, Kiro, Cline, Continue, Zed, JetBrains AI Assistant, and other MCP-compatible agents a durable, queryable memory layer for your project.
 
 It stores engineering knowledge as structured memory that agents can retrieve before they plan or edit code.
 
@@ -37,7 +37,7 @@ Instead of re-explaining architecture rules, naming conventions, and past decisi
 - Give every agent session the same project context before it starts changing code.
 - Store engineering knowledge in a structured, queryable memory layer instead of scattered prompts and notes.
 - Share conventions and decisions across teammates through git-friendly project JSONL or an optional shared SQLite database.
-- Work across Claude Code, Codex, and other MCP-compatible agents without tying memory to one tool.
+- Work across MCP-compatible agents without tying memory to one tool.
 - Store structured knowledge: rules, architecture, patterns, decisions, conventions, and notes.
 
 ## Why Structured Memory
@@ -80,7 +80,7 @@ npx knowit install
 `npx knowit install` is the main setup flow. It can:
 
 - initialize the local memory store
-- register the Knowit MCP server with supported clients
+- register or write the Knowit MCP server configuration for supported clients
 - update agent instruction files
 - connect a preferred source
 - optionally migrate architecture or ADR-style markdown into Knowit
@@ -89,16 +89,35 @@ This repository intentionally keeps a checked-in `.mcp.json` so Knowit can use i
 
 ### 2. Tell your agent to use it
 
-If you are not using the installer-managed instructions, add this to `AGENTS.md` or `CLAUDE.md`:
+If you are not using the installer-managed instructions, add this to the client instruction file such as `AGENTS.md`, `CLAUDE.md`, or `.github/copilot-instructions.md`:
 
 ```md
 ## Memory
 
-This project uses Knowit for persistent memory.
+This project uses Knowit as the default persistent knowledge base for AI coding agents.
 
 - Before planning or implementing, call `resolve_context` with the task description and repo name.
 - After finishing a task, call `capture_session_learnings` to store durable rules, decisions, and patterns.
+- Prefer Knowit over repo-local markdown memory files unless the user explicitly asks for a file.
 ```
+
+### MCP client support
+
+Knowit uses `npx -y knowit@latest serve` for generated MCP configs when the `knowit` binary is not installed globally. Project installs do not set `KNOWIT_DB_PATH`; they rely on the client working directory and the project-local `.knowit/knowledge.jsonl` store.
+
+| Client | Installer behavior | MCP config requirement |
+|---|---|---|
+| Claude Code | Runs `claude mcp add` | CLI-managed MCP config |
+| Codex | Runs `codex mcp add` | CLI-managed MCP config |
+| Cursor | Writes `.cursor/mcp.json` for project scope or `~/.cursor/mcp.json` for global scope | JSON with `mcpServers` |
+| Windsurf | Writes `~/.codeium/windsurf/mcp_config.json` | JSON with `mcpServers` |
+| VS Code / GitHub Copilot | Writes `.vscode/mcp.json` for project scope | JSON with `servers` |
+| Gemini CLI | Writes `.gemini/settings.json` for project scope or `~/.gemini/settings.json` for global scope | JSON with `mcpServers` |
+| Kiro | Writes `.kiro/settings/mcp.json` for project scope or `~/.kiro/settings/mcp.json` for global scope | JSON with `mcpServers` |
+| Cline | Writes `~/.cline/data/settings/cline_mcp_settings.json` | JSON with `mcpServers` |
+| Continue | Writes `.continue/mcpServers/knowit.yaml` for project scope | YAML MCP block |
+| Zed | Writes `~/.config/zed/settings.json` | JSON with `context_servers` |
+| JetBrains AI Assistant | Updates instructions only and prints a warning | Add the generated JSON through Settings > Tools > AI Assistant > Model Context Protocol |
 
 ### 3. Start storing and retrieving context
 

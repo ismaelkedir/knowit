@@ -106,6 +106,58 @@ test("project MCP config uses latest npx command when npx mode is selected", asy
   }
 });
 
+test("project install writes documented MCP config files for file-based clients", async () => {
+  const { cwd, cleanup } = createTempProject();
+  const originalCwd = process.cwd();
+
+  try {
+    const plan = createInstallPlan({
+      clients: ["cursor", "vscode", "gemini", "kiro", "continue"],
+      scope: "project",
+      sourceProvider: "local",
+      migrateMarkdown: false,
+      markdownPaths: [],
+      repo: "knowit",
+      cwd,
+      useNpxForMcp: true,
+    });
+
+    await applyInstallPlan(plan, {
+      cwd,
+      runner: { run() {} },
+    });
+
+    const cursorConfig = JSON.parse(fs.readFileSync(path.join(cwd, ".cursor", "mcp.json"), "utf8")) as {
+      mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+    };
+    const vscodeConfig = JSON.parse(fs.readFileSync(path.join(cwd, ".vscode", "mcp.json"), "utf8")) as {
+      servers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+    };
+    const geminiConfig = JSON.parse(fs.readFileSync(path.join(cwd, ".gemini", "settings.json"), "utf8")) as {
+      mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+    };
+    const kiroConfig = JSON.parse(fs.readFileSync(path.join(cwd, ".kiro", "settings", "mcp.json"), "utf8")) as {
+      mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+    };
+    const continueConfig = fs.readFileSync(path.join(cwd, ".continue", "mcpServers", "knowit.yaml"), "utf8");
+
+    assert.equal(cursorConfig.mcpServers?.knowit?.command, "npx");
+    assert.deepEqual(cursorConfig.mcpServers?.knowit?.args, ["-y", "knowit@latest", "serve"]);
+    assert.equal(cursorConfig.mcpServers?.knowit?.env, undefined);
+    assert.equal(vscodeConfig.servers?.knowit?.command, "npx");
+    assert.deepEqual(vscodeConfig.servers?.knowit?.args, ["-y", "knowit@latest", "serve"]);
+    assert.equal(geminiConfig.mcpServers?.knowit?.command, "npx");
+    assert.equal(kiroConfig.mcpServers?.knowit?.command, "npx");
+    assert.match(continueConfig, /name: Knowit/);
+    assert.match(continueConfig, /command: npx/);
+    assert.doesNotMatch(continueConfig, /KNOWIT_DB_PATH/);
+  } finally {
+    process.chdir(originalCwd);
+    resetDatabase();
+    cleanup();
+  }
+});
+
 test("project MCP registrations do not pin KNOWIT_DB_PATH", () => {
   const { cwd, cleanup } = createTempProject();
 
