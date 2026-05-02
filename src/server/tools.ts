@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { MemoryService } from "../services/memoryService.js";
 import { INSTRUCTIONS_WARNING } from "./instructionCheck.js";
 import {
+  knowledgeContentBlockSchema,
   knowledgeScopeSchema,
   knowledgeTypeSchema,
   resolveContextInputSchema,
@@ -37,6 +38,7 @@ const storeKnowledgeSchema = {
   type: knowledgeTypeSchema,
   title: z.string().min(1),
   content: z.string().min(1),
+  body: z.array(knowledgeContentBlockSchema).default([]),
   summary: z.string().max(300).optional(),
   scope: knowledgeScopeSchema.default("global"),
   repo: z.string().optional(),
