@@ -34,11 +34,26 @@ const parseClients = (value: string | undefined): SupportedClient[] | null => {
     return ["claude", "codex"];
   }
 
-  if (value === "claude" || value === "codex") {
-    return [value];
+  const clients = value.split(",").map((client) => client.trim()).filter(Boolean);
+  const supportedClients = new Set<SupportedClient>([
+    "claude",
+    "codex",
+    "cursor",
+    "windsurf",
+    "vscode",
+    "gemini",
+    "kiro",
+    "cline",
+    "continue",
+    "zed",
+    "jetbrains",
+  ]);
+
+  if (clients.length > 0 && clients.every((client): client is SupportedClient => supportedClients.has(client as SupportedClient))) {
+    return clients;
   }
 
-  throw new Error("client must be one of: claude, codex, both");
+  throw new Error("client must be one of: claude, codex, cursor, windsurf, vscode, gemini, kiro, cline, continue, zed, jetbrains, both, or a comma-separated list");
 };
 
 const parseScope = (value: string | undefined): InstallScope | null => {
@@ -135,6 +150,13 @@ const printPlan = (plan: InstallPlan): void => {
     output.write(`- Project MCP config: ${plan.projectMcpConfigPath}\n`);
   }
 
+  if (plan.mcpConfigTargets.length > 0) {
+    output.write("- Client MCP config files:\n");
+    for (const target of plan.mcpConfigTargets) {
+      output.write(`  - ${target.client}: ${target.path}\n`);
+    }
+  }
+
   if (plan.mcpRegistrations.length > 0) {
     output.write("- MCP registration commands:\n");
     for (const registration of plan.mcpRegistrations) {
@@ -196,6 +218,15 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
         { label: "Claude Code", value: "claude" },
         { label: "Codex", value: "codex" },
         { label: "Both Claude Code and Codex", value: "both" },
+        { label: "Cursor", value: "cursor" },
+        { label: "Windsurf", value: "windsurf" },
+        { label: "VS Code / GitHub Copilot", value: "vscode" },
+        { label: "Gemini CLI", value: "gemini" },
+        { label: "Kiro", value: "kiro" },
+        { label: "Cline", value: "cline" },
+        { label: "Continue", value: "continue" },
+        { label: "Zed", value: "zed" },
+        { label: "JetBrains AI Assistant", value: "jetbrains" },
       ]).then((value) => (value === "both" ? ["claude", "codex"] : [value]))) as SupportedClient[]);
 
     const scopeChoice =

@@ -7,7 +7,18 @@ import { resetDatabase } from "../db/database.js";
 import type { KnownSourceProvider } from "../types/source.js";
 import type { KnowledgeType } from "../types/knowledge.js";
 
-export type SupportedClient = "claude" | "codex";
+export type SupportedClient =
+  | "claude"
+  | "codex"
+  | "cursor"
+  | "windsurf"
+  | "vscode"
+  | "gemini"
+  | "kiro"
+  | "cline"
+  | "continue"
+  | "zed"
+  | "jetbrains";
 export type InstallScope = "project" | "global";
 
 export interface InstallSelections {
@@ -33,6 +44,7 @@ export interface InstallPlan {
   dbPath: string;
   instructionTargets: InstallInstructionTarget[];
   projectMcpConfigPath: string | null;
+  mcpConfigTargets: InstallMcpConfigTarget[];
   markdownImports: MarkdownImportPlan[];
   mcpRegistrations: ClientRegistrationPlan[];
   warnings: string[];
@@ -43,6 +55,12 @@ export interface InstallPlan {
 export interface InstallInstructionTarget {
   client: SupportedClient;
   path: string;
+}
+
+export interface InstallMcpConfigTarget {
+  client: SupportedClient;
+  path: string;
+  format: "mcpServersJson" | "vscodeServersJson" | "continueYaml" | "zedContextServersJson";
 }
 
 export interface MarkdownImportPlan {
@@ -226,6 +244,82 @@ const getInstructionPath = (client: SupportedClient, scope: InstallScope, cwd: s
     path.join(os.homedir(), "AGENTS.md");
 };
 
+const getMcpConfigTarget = (client: SupportedClient, scope: InstallScope, cwd: string): InstallMcpConfigTarget | null => {
+  if (client === "cursor") {
+    return {
+      client,
+      path: scope === "project" ? path.join(cwd, ".cursor", "mcp.json") : path.join(os.homedir(), ".cursor", "mcp.json"),
+      format: "mcpServersJson",
+    };
+  }
+
+  if (client === "windsurf") {
+    return {
+      client,
+      path: path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json"),
+      format: "mcpServersJson",
+    };
+  }
+
+  if (client === "vscode") {
+    if (scope !== "project") {
+      return null;
+    }
+    return {
+      client,
+      path: path.join(cwd, ".vscode", "mcp.json"),
+      format: "vscodeServersJson",
+    };
+  }
+
+  if (client === "gemini") {
+    return {
+      client,
+      path: scope === "project" ? path.join(cwd, ".gemini", "settings.json") : path.join(os.homedir(), ".gemini", "settings.json"),
+      format: "mcpServersJson",
+    };
+  }
+
+  if (client === "kiro") {
+    return {
+      client,
+      path: scope === "project"
+        ? path.join(cwd, ".kiro", "settings", "mcp.json")
+        : path.join(os.homedir(), ".kiro", "settings", "mcp.json"),
+      format: "mcpServersJson",
+    };
+  }
+
+  if (client === "cline") {
+    return {
+      client,
+      path: path.join(os.homedir(), ".cline", "data", "settings", "cline_mcp_settings.json"),
+      format: "mcpServersJson",
+    };
+  }
+
+  if (client === "continue") {
+    if (scope !== "project") {
+      return null;
+    }
+    return {
+      client,
+      path: path.join(cwd, ".continue", "mcpServers", "knowit.yaml"),
+      format: "continueYaml",
+    };
+  }
+
+  if (client === "zed") {
+    return {
+      client,
+      path: path.join(os.homedir(), ".config", "zed", "settings.json"),
+      format: "zedContextServersJson",
+    };
+  }
+
+  return null;
+};
+
 const getInstallDatabasePath = (scope: InstallScope, cwd: string): string =>
   scope === "global" ? path.join(os.homedir(), ".knowit", "knowit.db") : path.join(cwd, ".knowit", "knowit.db");
 
@@ -246,13 +340,13 @@ const buildInstructionBlock = (
     knowitStartMarker,
     "## Knowit Memory",
     "",
-    "This project uses Knowit as its persistent memory layer.",
+    "This project uses Knowit as the default persistent knowledge base for AI coding agents.",
     "",
-    "- Before planning or implementing, check Knowit for relevant context.",
+    "- Before planning or implementing, check Knowit for relevant project context.",
     routeLine,
     "- After finishing a task, store any durable rules, decisions, patterns, or conventions back into Knowit.",
     "- Prefer Knowit over repo-local markdown memory files unless the user explicitly asks for a file.",
-    client === "codex"
+    sourceProvider === "local"
       ? "- When a task creates durable documentation, consult Knowit first and only write repo markdown when explicitly requested."
       : "- When Knowit routes you to an external provider, use the returned MCP guidance instead of guessing the downstream tool.",
     knowitEndMarker,
@@ -326,39 +420,102 @@ const buildMcpRegistrationPlan = (
     };
   }
 
-  return {
-    client,
-    command: "codex",
-    args: ["mcp", "add", "knowit", ...codexEnvArgs, "--", serverCommand, ...serverArgs],
-  };
+  if (client === "codex") {
+    return {
+      client,
+      command: "codex",
+      args: ["mcp", "add", "knowit", ...codexEnvArgs, "--", serverCommand, ...serverArgs],
+    };
+  }
+
+  throw new Error(`Client ${client} does not use CLI MCP registration.`);
 };
 
-const mergeProjectMcpConfig = (existingContents: string | null, useNpx: boolean): string => {
+const buildServerConfig = (useNpx: boolean, includeType: boolean = true): Record<string, unknown> => ({
+  ...(includeType ? { type: "stdio" } : {}),
+  command: useNpx ? "npx" : "knowit",
+  args: useNpx ? ["-y", "knowit@latest", "serve"] : ["serve"],
+});
+
+const mergeJsonObject = (
+  existingContents: string | null,
+  key: "mcpServers" | "servers" | "context_servers",
+  useNpx: boolean,
+  includeType: boolean,
+): string => {
   const parsed =
     existingContents && existingContents.trim().length > 0
-      ? (JSON.parse(existingContents) as { mcpServers?: Record<string, unknown> })
+      ? (JSON.parse(existingContents) as Record<string, unknown>)
       : {};
 
-  const mcpServers =
-    parsed.mcpServers && typeof parsed.mcpServers === "object" && !Array.isArray(parsed.mcpServers)
-      ? parsed.mcpServers
+  const existingServers =
+    parsed[key] && typeof parsed[key] === "object" && !Array.isArray(parsed[key])
+      ? (parsed[key] as Record<string, unknown>)
       : {};
 
   return `${JSON.stringify(
     {
       ...parsed,
-      mcpServers: {
-        ...mcpServers,
-        knowit: {
-          type: "stdio",
-          command: useNpx ? "npx" : "knowit",
-          args: useNpx ? ["-y", "knowit@latest", "serve"] : ["serve"],
-        },
+      [key]: {
+        ...existingServers,
+        knowit: buildServerConfig(useNpx, includeType),
       },
     },
     null,
     2,
   )}\n`;
+};
+
+const mergeMcpClientConfig = (
+  existingContents: string | null,
+  target: InstallMcpConfigTarget,
+  useNpx: boolean,
+): string => {
+  if (target.format === "vscodeServersJson") {
+    return mergeJsonObject(existingContents, "servers", useNpx, true);
+  }
+
+  if (target.format === "zedContextServersJson") {
+    return mergeJsonObject(existingContents, "context_servers", useNpx, false);
+  }
+
+  if (target.format === "continueYaml") {
+    const command = useNpx ? "npx" : "knowit";
+    const args = useNpx ? ["-y", "knowit@latest", "serve"] : ["serve"];
+    return [
+      "name: Knowit",
+      "version: 0.0.1",
+      "schema: v1",
+      "mcpServers:",
+      "  - name: Knowit",
+      "    type: stdio",
+      `    command: ${command}`,
+      "    args:",
+      ...args.map((arg) => `      - ${JSON.stringify(arg)}`),
+      "",
+    ].join("\n");
+  }
+
+  return mergeJsonObject(existingContents, "mcpServers", useNpx, true);
+};
+
+const isCliRegisteredClient = (client: SupportedClient): boolean => client === "claude" || client === "codex";
+
+const buildCliRegistrationPlan = (
+  client: SupportedClient,
+  scope: InstallScope,
+  dbPath: string | null,
+  useNpx: boolean,
+): ClientRegistrationPlan | null => {
+  if (!isCliRegisteredClient(client)) {
+    return null;
+  }
+
+  return buildMcpRegistrationPlan(client, scope, dbPath, useNpx);
+};
+
+const mergeProjectMcpConfig = (existingContents: string | null, useNpx: boolean): string => {
+  return mergeJsonObject(existingContents, "mcpServers", useNpx, true);
 };
 
 export const detectMarkdownCandidates = (cwd: string): string[] => walkMarkdownFiles(cwd);
@@ -375,12 +532,45 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
 
   const globalInstallRequested = selections.installGlobally ?? false;
   const useNpxForMcp = selections.useNpxForMcp ?? false;
+  const mcpConfigTargets = selections.clients
+    .map((client) => getMcpConfigTarget(client, selections.scope, selections.cwd))
+    .filter((target): target is InstallMcpConfigTarget => target !== null);
+  const mcpRegistrations = selections.clients
+    .map((client) =>
+      buildCliRegistrationPlan(
+        client,
+        selections.scope,
+        selections.scope === "global" ? getInstallDatabasePath(selections.scope, selections.cwd) : null,
+        useNpxForMcp,
+      ),
+    )
+    .filter((registration): registration is ClientRegistrationPlan => registration !== null);
 
   const warnings: string[] = [];
   if (selections.scope === "project" && selections.clients.includes("codex")) {
     warnings.push(
       "Codex MCP registration is installed through the user-level Codex CLI; project scope currently only affects the instruction file path.",
     );
+  }
+  if (selections.scope === "project" && selections.clients.includes("windsurf")) {
+    warnings.push("Windsurf documents a user-level MCP config path, so Knowit will update Windsurf's user MCP config.");
+  }
+  if (selections.scope === "project" && selections.clients.includes("cline")) {
+    warnings.push("Cline stores MCP servers in user-level settings, so Knowit will update Cline's user MCP config.");
+  }
+  if (selections.scope === "project" && selections.clients.includes("zed")) {
+    warnings.push("Zed stores custom MCP context servers in user settings, so Knowit will update Zed's user settings.");
+  }
+  if (selections.clients.includes("jetbrains")) {
+    warnings.push(
+      "JetBrains AI Assistant currently requires adding MCP JSON through the IDE settings UI; Knowit will only update the instruction file.",
+    );
+  }
+  if (selections.scope === "global" && selections.clients.includes("vscode")) {
+    warnings.push("VS Code user profile MCP paths vary by profile; Knowit only writes VS Code MCP config for project installs.");
+  }
+  if (selections.scope === "global" && selections.clients.includes("continue")) {
+    warnings.push("Continue's documented standalone MCP block path is workspace-scoped; Knowit only writes Continue MCP config for project installs.");
   }
   if (selections.sourceProvider !== "local") {
     warnings.push(
@@ -398,15 +588,9 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
     dbPath: getInstallDatabasePath(selections.scope, selections.cwd),
     instructionTargets,
     projectMcpConfigPath: getProjectMcpConfigPath(selections.scope, selections.cwd),
+    mcpConfigTargets,
     markdownImports,
-    mcpRegistrations: selections.clients.map((client) =>
-      buildMcpRegistrationPlan(
-        client,
-        selections.scope,
-        selections.scope === "global" ? getInstallDatabasePath(selections.scope, selections.cwd) : null,
-        useNpxForMcp,
-      ),
-    ),
+    mcpRegistrations,
     warnings,
     globalInstallRequested,
     useNpxForMcp,
@@ -487,6 +671,12 @@ export const applyInstallPlan = async (
         ? fs.readFileSync(plan.projectMcpConfigPath, "utf8")
         : null;
       fs.writeFileSync(plan.projectMcpConfigPath, mergeProjectMcpConfig(currentMcpConfig, plan.useNpxForMcp), "utf8");
+    }
+
+    for (const target of plan.mcpConfigTargets) {
+      fs.mkdirSync(path.dirname(target.path), { recursive: true });
+      const currentMcpConfig = fs.existsSync(target.path) ? fs.readFileSync(target.path, "utf8") : null;
+      fs.writeFileSync(target.path, mergeMcpClientConfig(currentMcpConfig, target, plan.useNpxForMcp), "utf8");
     }
 
     let importedEntryCount = 0;
