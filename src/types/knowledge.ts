@@ -81,6 +81,7 @@ export const knowledgeEntrySchema = z.object({
 
 export const knowledgeEntryInputSchema = z
   .object({
+    id: z.string().min(1).optional(),
     title: z.string().min(1),
     type: knowledgeTypeSchema,
     content: z.string().min(1),
@@ -140,6 +141,7 @@ export const resolveContextInputSchema = z.object({
 export const storeKnowledgeInputSchema = z
   .object({
     source: z.string().trim().min(1).optional(),
+    id: z.string().min(1).optional(),
     title: z.string().min(1),
     type: knowledgeTypeSchema,
     content: z.string().min(1),
