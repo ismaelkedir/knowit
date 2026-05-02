@@ -2,13 +2,12 @@
   "mcpServers": {
     "knowit": {
       "type": "stdio",
-      "command": "knowit",
+      "command": "npx",
       "args": [
+        "-y",
+        "knowit@latest",
         "serve"
-      ],
-      "env": {
-        "KNOWIT_DB_PATH": ".knowit/knowit.db"
-      }
+      ]
     }
   }
 }
