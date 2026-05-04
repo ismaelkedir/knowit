@@ -349,6 +349,9 @@ const buildInstructionBlock = (
     sourceProvider === "local"
       ? "- When a task creates durable documentation, consult Knowit first and only write repo markdown when explicitly requested."
       : "- When Knowit routes you to an external provider, use the returned MCP guidance instead of guessing the downstream tool.",
+    "- Never store sensitive information such as credentials, API keys, tokens, or personal data.",
+    "- Never store proprietary or closed-source implementation details when working in an open-source project context.",
+    "- Only store knowledge directly relevant to the current project — skip observations about unrelated systems or codebases.",
     knowitEndMarker,
   ].join("\n");
 };
