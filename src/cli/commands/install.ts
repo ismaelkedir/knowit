@@ -300,8 +300,15 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
   if (!options.migrateMd) {
     const detected = detectMarkdownCandidates(cwd);
     if (detected.length > 0) {
+      const dbPath =
+        (scopeChoice as InstallScope) === "global"
+          ? path.join(os.homedir(), ".knowit", "knowit.db")
+          : path.join(cwd, ".knowit", "knowit.db");
+      const isReinstall = fs.existsSync(dbPath);
       const migrateAnswer = await p.confirm({
-        message: `Import ${detected.length} existing markdown knowledge file${detected.length === 1 ? "" : "s"} into Knowit?`,
+        message: isReinstall
+          ? `Refresh ${detected.length} knowledge file${detected.length === 1 ? "" : "s"} in Knowit? (already imported — will update any that changed)`
+          : `Import ${detected.length} existing markdown knowledge file${detected.length === 1 ? "" : "s"} into Knowit?`,
         initialValue: true,
       });
       cancelIfNeeded(migrateAnswer);
