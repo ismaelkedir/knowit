@@ -116,6 +116,18 @@ export const formatCommand = (command: string, args: string[]): string =>
     .map((part) => (/[\s"'$]/.test(part) ? JSON.stringify(part) : part))
     .join(" ");
 
+const detectExistingSourceProvider = (filePath: string): KnownSourceProvider | null => {
+  if (!fs.existsSync(filePath)) return null;
+  const contents = fs.readFileSync(filePath, "utf8");
+  const startIndex = contents.indexOf(knowitStartMarker);
+  const endIndex = contents.indexOf(knowitEndMarker);
+  if (startIndex < 0 || endIndex <= startIndex) return null;
+  const block = contents.slice(startIndex, endIndex + knowitEndMarker.length);
+  if (block.includes("resolve_source_action")) return "notion";
+  if (block.includes("resolve_context")) return "local";
+  return null;
+};
+
 const ignoredDirectories = new Set([".git", ".knowit", "node_modules", "dist", "coverage"]);
 const ignoredMarkdownFiles = new Set(["readme.md", "changelog.md", "license.md"]);
 const preferredMarkdownPatterns = [
@@ -579,6 +591,20 @@ export const createInstallPlan = (selections: InstallSelections): InstallPlan =>
     warnings.push(
       "External routed sources become the default for resolve_source_action, while direct Knowit storage still falls back to the local source.",
     );
+  }
+
+  const seenSourceChanges = new Set<string>();
+  for (const target of instructionTargets) {
+    const existingProvider = detectExistingSourceProvider(target.path);
+    if (existingProvider !== null && existingProvider !== selections.sourceProvider) {
+      const key = `${existingProvider}->${selections.sourceProvider}`;
+      if (!seenSourceChanges.has(key)) {
+        seenSourceChanges.add(key);
+        warnings.push(
+          `Source changing from "${existingProvider}" to "${selections.sourceProvider}" — existing knowledge in the local store will not be removed, but "${selections.sourceProvider}" becomes the new default.`,
+        );
+      }
+    }
   }
 
   return {
