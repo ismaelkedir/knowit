@@ -1,7 +1,9 @@
 import path from "node:path";
-import readline from "node:readline/promises";
+import fs from "node:fs";
+import os from "node:os";
 import { spawnSync } from "node:child_process";
-import { stdin as input, stdout as output } from "node:process";
+import * as p from "@clack/prompts";
+import pc from "picocolors";
 import {
   applyInstallPlan,
   createInstallPlan,
@@ -82,102 +84,120 @@ const parseSource = (value: string | undefined): KnownSourceProvider | null => {
   throw new Error("source must be one of: local, notion");
 };
 
-const askChoice = async <T extends string>(
-  rl: readline.Interface,
-  prompt: string,
-  options: Array<{ label: string; value: T }>,
-): Promise<T> => {
-  while (true) {
-    output.write(`${prompt}\n`);
-    options.forEach((option, index) => {
-      output.write(`  ${index + 1}. ${option.label}\n`);
-    });
+const hasCommand = (name: string): boolean => {
+  const cmd = process.platform === "win32" ? "where" : "which";
+  return spawnSync(cmd, [name], { stdio: "pipe" }).status === 0;
+};
 
-    const answer = (await rl.question("> ")).trim();
-    const numericIndex = Number(answer);
+const dirExists = (...segments: string[]): boolean =>
+  fs.existsSync(path.join(...segments));
 
-    if (Number.isInteger(numericIndex) && numericIndex >= 1 && numericIndex <= options.length) {
-      return options[numericIndex - 1]!.value;
-    }
-
-    const directMatch = options.find((option) => option.value === answer);
-    if (directMatch) {
-      return directMatch.value;
-    }
-
-    output.write("Invalid selection. Try again.\n\n");
+const detectClient = (client: SupportedClient): boolean => {
+  const home = os.homedir();
+  switch (client) {
+    case "claude":
+      return hasCommand("claude") || dirExists(home, ".claude");
+    case "codex":
+      return hasCommand("codex") || dirExists(home, ".codex");
+    case "cursor":
+      return dirExists(home, ".cursor") || dirExists("/Applications/Cursor.app");
+    case "windsurf":
+      return dirExists(home, ".codeium") || dirExists("/Applications/Windsurf.app");
+    case "vscode":
+      return hasCommand("code") || dirExists(home, ".vscode") || dirExists("/Applications/Visual Studio Code.app");
+    case "gemini":
+      return hasCommand("gemini") || dirExists(home, ".gemini");
+    case "kiro":
+      return dirExists(home, ".kiro") || dirExists("/Applications/Kiro.app");
+    case "cline":
+      return dirExists(home, ".cline");
+    case "continue":
+      return dirExists(home, ".continue");
+    case "zed":
+      return dirExists(home, ".config", "zed") || dirExists("/Applications/Zed.app");
+    case "jetbrains":
+      return (
+        dirExists(home, "Library", "Application Support", "JetBrains") ||
+        dirExists(home, ".config", "JetBrains")
+      );
   }
 };
 
-const askYesNo = async (rl: readline.Interface, prompt: string, defaultValue: boolean): Promise<boolean> => {
-  const suffix = defaultValue ? " [Y/n] " : " [y/N] ";
+const clientNextSteps: Partial<Record<SupportedClient, string>> = {
+  cursor: "Reload MCP servers in Cursor: Cmd+Shift+P → MCP: Reload Servers",
+  windsurf: "Restart Windsurf to load the MCP server",
+  vscode: "Open Command Palette → MCP: List Servers to verify",
+  gemini: "Restart your Gemini CLI session",
+  kiro: "Restart Kiro to load the MCP config",
+  cline: "Reload the Cline extension to pick up the MCP config",
+  continue: "Reload the Continue extension to pick up the MCP config",
+  zed: "Restart Zed to load the MCP server",
+  jetbrains: "Add MCP server manually: Settings → AI Assistant → Model Context Protocol → Add",
+};
 
-  while (true) {
-    const answer = (await rl.question(`${prompt}${suffix}`)).trim().toLowerCase();
-    if (!answer) {
-      return defaultValue;
-    }
-    if (answer === "y" || answer === "yes") {
-      return true;
-    }
-    if (answer === "n" || answer === "no") {
-      return false;
-    }
+const cancelIfNeeded = (value: unknown): void => {
+  if (p.isCancel(value)) {
+    p.cancel("Install cancelled.");
+    process.exit(0);
   }
 };
 
 const printPlan = (plan: InstallPlan): void => {
-  output.write("\nInstall plan\n");
-  output.write(`- Clients: ${plan.clients.join(", ")}\n`);
-  output.write(`- Scope: ${plan.scope}\n`);
-  output.write(`- Preferred source: ${plan.sourceProvider}\n`);
-  output.write(`- Database path: ${plan.dbPath}\n`);
+  const lines: string[] = [
+    `${pc.bold("Clients:")} ${plan.clients.join(", ")}`,
+    `${pc.bold("Scope:")} ${plan.scope}`,
+    `${pc.bold("Database:")} ${plan.dbPath}`,
+  ];
+
   if (plan.globalInstallRequested) {
-    output.write("- Global install: npm install -g knowit\n");
+    lines.push(`${pc.bold("Global install:")} npm install -g knowit`);
   }
   if (plan.useNpxForMcp) {
-    output.write("- MCP server command: npx -y knowit@latest serve\n");
+    lines.push(`${pc.bold("MCP command:")} npx -y knowit@latest serve`);
   }
-
   if (plan.instructionTargets.length > 0) {
-    output.write("- Instruction files:\n");
+    lines.push(pc.bold("Instruction files:"));
     for (const target of plan.instructionTargets) {
-      output.write(`  - ${target.client}: ${target.path}\n`);
+      lines.push(`  ${pc.dim(target.client + ":")} ${target.path}`);
     }
   }
-
   if (plan.projectMcpConfigPath) {
-    output.write(`- Project MCP config: ${plan.projectMcpConfigPath}\n`);
+    lines.push(`${pc.bold("Project MCP config:")} ${plan.projectMcpConfigPath}`);
   }
-
   if (plan.mcpConfigTargets.length > 0) {
-    output.write("- Client MCP config files:\n");
+    lines.push(pc.bold("Client MCP configs:"));
     for (const target of plan.mcpConfigTargets) {
-      output.write(`  - ${target.client}: ${target.path}\n`);
+      lines.push(`  ${pc.dim(target.client + ":")} ${target.path}`);
     }
   }
-
   if (plan.mcpRegistrations.length > 0) {
-    output.write("- MCP registration commands:\n");
+    lines.push(pc.bold("MCP registrations:"));
     for (const registration of plan.mcpRegistrations) {
-      output.write(`  - ${registration.client}: ${formatCommand(registration.command, registration.args)}\n`);
+      lines.push(`  ${pc.dim(registration.client + ":")} ${formatCommand(registration.command, registration.args)}`);
     }
   }
-
   if (plan.markdownImports.length > 0) {
-    output.write("- Markdown imports:\n");
+    lines.push(pc.bold("Markdown imports:"));
     for (const markdownFile of plan.markdownImports) {
-      output.write(`  - ${path.relative(process.cwd(), markdownFile.path)} -> ${markdownFile.title} (${markdownFile.type})\n`);
+      lines.push(`  ${path.relative(process.cwd(), markdownFile.path)} ${pc.dim("→")} ${markdownFile.title} ${pc.dim("(" + markdownFile.type + ")")}`);
+    }
+  }
+  if (plan.warnings.length > 0) {
+    lines.push(pc.yellow(pc.bold("Warnings:")));
+    for (const warning of plan.warnings) {
+      lines.push(`  ${pc.yellow("⚠")} ${warning}`);
     }
   }
 
-  if (plan.warnings.length > 0) {
-    output.write("- Warnings:\n");
-    for (const warning of plan.warnings) {
-      output.write(`  - ${warning}\n`);
+  const nextStepClients = plan.clients.filter((c) => clientNextSteps[c]);
+  if (nextStepClients.length > 0) {
+    lines.push(pc.bold("Next steps:"));
+    for (const client of nextStepClients) {
+      lines.push(`  ${pc.dim(client + ":")} ${clientNextSteps[client]}`);
     }
   }
-  output.write("\n");
+
+  p.note(lines.join("\n"), "Install plan");
 };
 
 const buildSelections = async (options: InstallOptions): Promise<InstallSelections> => {
@@ -191,14 +211,14 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
   const globallyInstalled = isGloballyInstalled();
 
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    if (!predefinedClients || !predefinedScope || !predefinedSource) {
-      throw new Error("install requires --client, --scope, and --source when not running in an interactive terminal.");
+    if (!predefinedClients || !predefinedScope) {
+      throw new Error("install requires --client and --scope when not running in an interactive terminal.");
     }
 
     return {
       clients: predefinedClients,
       scope: predefinedScope,
-      sourceProvider: predefinedSource,
+      sourceProvider: predefinedSource ?? "local",
       mcpServerName: options.mcpServerName,
       migrateMarkdown: Boolean(options.migrateMd),
       markdownPaths: options.migrateMd ? (markdownPaths.length > 0 ? markdownPaths : detectMarkdownCandidates(cwd)) : [],
@@ -209,91 +229,104 @@ const buildSelections = async (options: InstallOptions): Promise<InstallSelectio
     };
   }
 
-  const rl = readline.createInterface({ input, output });
+  p.intro(pc.bgCyan(pc.black(" Knowit installer ")));
 
-  try {
-    const clientChoice =
-      predefinedClients ??
-      ((await askChoice(rl, "Which client do you want Knowit to install into?", [
-        { label: "Claude Code", value: "claude" },
-        { label: "Codex", value: "codex" },
-        { label: "Both Claude Code and Codex", value: "both" },
-        { label: "Cursor", value: "cursor" },
-        { label: "Windsurf", value: "windsurf" },
-        { label: "VS Code / GitHub Copilot", value: "vscode" },
-        { label: "Gemini CLI", value: "gemini" },
-        { label: "Kiro", value: "kiro" },
-        { label: "Cline", value: "cline" },
-        { label: "Continue", value: "continue" },
-        { label: "Zed", value: "zed" },
-        { label: "JetBrains AI Assistant", value: "jetbrains" },
-      ]).then((value) => (value === "both" ? ["claude", "codex"] : [value]))) as SupportedClient[]);
+  const allClients: SupportedClient[] = [
+    "claude", "codex", "cursor", "windsurf", "vscode", "gemini",
+    "kiro", "cline", "continue", "zed", "jetbrains",
+  ];
+  const detectedClients = new Set(allClients.filter(detectClient));
+  const hint = (c: SupportedClient) => detectedClients.has(c) ? "detected" : "not found";
+  const commonClients: SupportedClient[] = ["claude", "codex", "cursor"];
 
-    const scopeChoice =
-      predefinedScope ??
-      ((await askChoice<InstallScope>(rl, "Where should the install apply?", [
-        { label: "Project only", value: "project" },
-        { label: "Global / user-wide", value: "global" },
-      ])) as InstallScope);
+  const clientChoice =
+    predefinedClients ??
+    (await p.multiselect<SupportedClient>({
+      message: "Which clients do you want to install into?",
+      options: [
+        { value: "claude", label: "Claude Code", hint: hint("claude") },
+        { value: "codex", label: "Codex", hint: hint("codex") },
+        { value: "cursor", label: "Cursor", hint: hint("cursor") },
+        { value: "windsurf", label: "Windsurf", hint: hint("windsurf") },
+        { value: "vscode", label: "VS Code / GitHub Copilot", hint: hint("vscode") },
+        { value: "gemini", label: "Gemini CLI", hint: hint("gemini") },
+        { value: "kiro", label: "Kiro", hint: hint("kiro") },
+        { value: "cline", label: "Cline", hint: hint("cline") },
+        { value: "continue", label: "Continue", hint: hint("continue") },
+        { value: "zed", label: "Zed", hint: hint("zed") },
+        { value: "jetbrains", label: "JetBrains AI Assistant", hint: hint("jetbrains") },
+      ],
+      initialValues: commonClients.filter((c) => detectedClients.has(c)),
+      required: true,
+    }) as SupportedClient[]);
+  cancelIfNeeded(clientChoice);
 
-    const sourceChoice =
-      predefinedSource ??
-      ((await askChoice<KnownSourceProvider>(rl, "Where should Knowit store long-term memory by default?", [
-        { label: "Local Knowit storage", value: "local" },
-        { label: "Notion (routed through Knowit guidance)", value: "notion" },
-      ])) as KnownSourceProvider);
+  const scopeChoice =
+    predefinedScope ??
+    await p.select<InstallScope>({
+      message: "Where should the install apply?",
+      options: [
+        { value: "project", label: "Project only", hint: "writes to this repo" },
+        { value: "global", label: "Global / user-wide", hint: "applies across all projects" },
+      ],
+    });
+  cancelIfNeeded(scopeChoice);
 
-    let installGlobally = false;
-    if (!globallyInstalled) {
-      installGlobally = await askYesNo(
-        rl,
-        "Install knowit globally? (faster MCP startup; skip to use npx instead)",
-        true,
-      );
-    }
-
-    let mcpServerName = options.mcpServerName;
-    if (!mcpServerName && sourceChoice === "notion") {
-      const answer = (await rl.question("What is the Notion MCP server name? [notion] ")).trim();
-      mcpServerName = answer || "notion";
-    }
-
-    let migrateMarkdown = Boolean(options.migrateMd);
-    let resolvedMarkdownPaths = markdownPaths;
-
-    if (!options.migrateMd) {
-      const detected = detectMarkdownCandidates(cwd);
-      if (detected.length > 0) {
-        migrateMarkdown = await askYesNo(
-          rl,
-          `Import ${detected.length} existing markdown knowledge files into Knowit?`,
-          true,
-        );
-        resolvedMarkdownPaths = migrateMarkdown ? detected : [];
-      } else {
-        output.write("No importable markdown knowledge files detected. Continuing without migration.\n\n");
-        migrateMarkdown = false;
-        resolvedMarkdownPaths = [];
-      }
-    } else if (resolvedMarkdownPaths.length === 0) {
-      resolvedMarkdownPaths = detectMarkdownCandidates(cwd);
-    }
-
-    return {
-      clients: clientChoice,
-      scope: scopeChoice,
-      sourceProvider: sourceChoice,
-      mcpServerName,
-      migrateMarkdown,
-      markdownPaths: resolvedMarkdownPaths,
-      repo,
-      cwd,
-      installGlobally,
-      useNpxForMcp: !globallyInstalled && !installGlobally,
-    };
-  } finally {
-    rl.close();
+  let installGlobally = false;
+  if (!globallyInstalled) {
+    const globalAnswer = await p.confirm({
+      message: "Install knowit globally? (faster MCP startup; skip to use npx instead)",
+      initialValue: true,
+    });
+    cancelIfNeeded(globalAnswer);
+    installGlobally = globalAnswer as boolean;
   }
+
+  let mcpServerName = options.mcpServerName;
+  const sourceProvider = predefinedSource ?? "local";
+  if (!mcpServerName && sourceProvider === "notion") {
+    const notionName = await p.text({
+      message: "Notion MCP server name:",
+      placeholder: "notion",
+      defaultValue: "notion",
+    });
+    cancelIfNeeded(notionName);
+    mcpServerName = (notionName as string) || "notion";
+  }
+
+  let migrateMarkdown = Boolean(options.migrateMd);
+  let resolvedMarkdownPaths = markdownPaths;
+
+  if (!options.migrateMd) {
+    const detected = detectMarkdownCandidates(cwd);
+    if (detected.length > 0) {
+      const migrateAnswer = await p.confirm({
+        message: `Import ${detected.length} existing markdown knowledge file${detected.length === 1 ? "" : "s"} into Knowit?`,
+        initialValue: true,
+      });
+      cancelIfNeeded(migrateAnswer);
+      migrateMarkdown = migrateAnswer as boolean;
+      resolvedMarkdownPaths = migrateMarkdown ? detected : [];
+    } else {
+      migrateMarkdown = false;
+      resolvedMarkdownPaths = [];
+    }
+  } else if (resolvedMarkdownPaths.length === 0) {
+    resolvedMarkdownPaths = detectMarkdownCandidates(cwd);
+  }
+
+  return {
+    clients: clientChoice,
+    scope: scopeChoice as InstallScope,
+    sourceProvider,
+    mcpServerName,
+    migrateMarkdown,
+    markdownPaths: resolvedMarkdownPaths,
+    repo,
+    cwd,
+    installGlobally,
+    useNpxForMcp: !globallyInstalled && !installGlobally,
+  };
 };
 
 export const installCommand = async (options: InstallOptions): Promise<void> => {
@@ -303,56 +336,55 @@ export const installCommand = async (options: InstallOptions): Promise<void> => 
   printPlan(plan);
 
   if (options.dryRun) {
-    output.write("Dry run only. No changes applied.\n");
+    p.outro(pc.dim("Dry run only. No changes applied."));
     return;
   }
 
   if (!options.yes && process.stdin.isTTY && process.stdout.isTTY) {
-    const rl = readline.createInterface({ input, output });
-    try {
-      const confirmed = await askYesNo(rl, "Apply this install plan?", true);
-      if (!confirmed) {
-        output.write("Install cancelled.\n");
-        return;
-      }
-    } finally {
-      rl.close();
+    const confirmed = await p.confirm({ message: "Apply this install plan?", initialValue: true });
+    cancelIfNeeded(confirmed);
+    if (!confirmed) {
+      p.cancel("Install cancelled.");
+      return;
     }
   }
 
-  const result = await applyInstallPlan(plan, {
-    cwd: selections.cwd,
-  });
+  const result = await applyInstallPlan(plan, { cwd: selections.cwd });
+
+  const summary: string[] = [];
 
   if (result.globalInstallSucceeded === true) {
-    output.write("knowit installed globally.\n");
+    summary.push(pc.green("✓") + " knowit installed globally");
   } else if (result.globalInstallSucceeded === false) {
-    output.write(
-      "Global install failed. MCP config uses `knowit serve` — run `npm install -g knowit` manually before starting your agent.\n",
+    summary.push(
+      pc.yellow("⚠") + " Global install failed — run " + pc.bold("npm install -g knowit") + " manually before starting your agent",
     );
   }
 
-  output.write(`Knowit installed for ${result.plan.clients.join(", ")}.\n`);
-  output.write(`Database: ${result.plan.dbPath}\n`);
+  summary.push(`${pc.green("✓")} Installed for ${pc.bold(result.plan.clients.join(", "))}`);
+  summary.push(`${pc.bold("Database:")} ${result.plan.dbPath}`);
+
   if (result.registrationOutcomes.length > 0) {
-    output.write("MCP registration:\n");
     for (const outcome of result.registrationOutcomes) {
       if (outcome.succeeded) {
-        output.write(`- ${outcome.client}: installed automatically\n`);
+        summary.push(`${pc.green("✓")} ${outcome.client}: MCP registered`);
       } else {
-        output.write(`- ${outcome.client}: automatic install failed\n`);
-        output.write(`  Error: ${outcome.error}\n`);
-        output.write(`  Run manually: ${outcome.command}\n`);
+        summary.push(`${pc.red("✗")} ${outcome.client}: MCP registration failed`);
+        summary.push(`  Run manually: ${outcome.command}`);
       }
     }
   }
+
   if (result.instructionPaths.length > 0) {
-    output.write(`Instruction files updated:\n`);
+    summary.push(pc.bold("Instructions written to:"));
     for (const instructionPath of result.instructionPaths) {
-      output.write(`- ${instructionPath}\n`);
+      summary.push(`  ${instructionPath}`);
     }
   }
+
   if (result.importedEntryCount > 0) {
-    output.write(`Imported ${result.importedEntryCount} markdown files into Knowit.\n`);
+    summary.push(`${pc.green("✓")} Imported ${result.importedEntryCount} markdown files`);
   }
+
+  p.outro(summary.join("\n"));
 };
