@@ -4,9 +4,13 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { resetDatabase } from "../db/database.js";
 import { MemoryService } from "../services/memoryService.js";
 import { startPreviewServer } from "../server/previewServer.js";
+
+const require = createRequire(import.meta.url);
+const packageJson = require("../../package.json") as { version: string };
 
 const withTempProject = async (callback: (tempDir: string) => Promise<void>): Promise<void> => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knowit-preview-"));
@@ -85,7 +89,7 @@ test("preview server exposes project JSONL entries and blocks writes", async () 
           storagePath: fs.realpathSync(path.dirname(metaBody.storagePath)) + path.sep + path.basename(metaBody.storagePath),
         },
         {
-        packageVersion: "0.3.0",
+          packageVersion: packageJson.version,
         sourceId: "local",
         sourceKind: "jsonl",
         sourceName: "Local JSONL",
