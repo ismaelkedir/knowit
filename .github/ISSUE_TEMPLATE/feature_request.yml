@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an improvement or new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the workflow gap, not just the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: input
+    id: client
+    attributes:
+      label: MCP client(s) you use
+      placeholder: Claude Code, Cursor, ...

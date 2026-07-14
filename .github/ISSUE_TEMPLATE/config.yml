@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & discussions
+    url: https://github.com/ismaelkedir/knowit/discussions
+    about: Ask questions, share workflows, discuss the roadmap
+  - name: Website & docs
+    url: https://useknowit.dev
+    about: Product overview and documentation

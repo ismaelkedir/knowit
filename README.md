@@ -1,24 +1,46 @@
-# Knowit
+# Knowit — shared, structured memory for AI coding agents
 
-Structured memory for AI coding agents.
+**Your agent forgets everything between sessions. Knowit fixes that.**
 
 [![npm version](https://img.shields.io/npm/v/knowit)](https://www.npmjs.com/package/knowit)
+[![npm downloads](https://img.shields.io/npm/dm/knowit)](https://www.npmjs.com/package/knowit)
 [![license](https://img.shields.io/github/license/ismaelkedir/knowit)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/ismaelkedir/knowit?style=social)](https://github.com/ismaelkedir/knowit)
 
-Knowit is an MCP server and CLI that gives Claude Code, Codex, Cursor, Windsurf, VS Code, Gemini CLI, Kiro, Cline, Continue, Zed, JetBrains AI Assistant, and other MCP-compatible agents a durable, queryable memory layer for your project.
+Knowit is an open-source MCP server + CLI that gives AI coding agents a persistent, queryable project memory — shared across sessions, across teammates, and across every MCP client: Claude Code, Codex, Cursor, Windsurf, VS Code/Copilot, Gemini CLI, Kiro, Cline, Continue, Zed, and JetBrains AI Assistant.
 
-It stores engineering knowledge as structured memory that agents can retrieve before they plan or edit code.
+Store architecture rules, decisions, and conventions once. Every agent retrieves the relevant context before it plans or edits code — no more re-explaining your codebase every session.
 
-Instead of re-explaining architecture rules, naming conventions, and past decisions every session, you store them once and let your agent retrieve the relevant context when needed.
+```bash
+npx knowit install
+```
+
+That's it. The wizard configures your MCP clients and initializes a local, git-friendly memory store at `.knowit/knowledge.jsonl`.
+
+🌐 **Website:** [useknowit.dev](https://useknowit.dev) · 📚 **Docs:** [useknowit.dev/docs](https://useknowit.dev/docs)
+
+<!-- TODO: hero screenshot of `knowit preview` — docs/assets/preview-hero.png -->
+
+## Why Knowit (and not another memory tool)
+
+|  | CLAUDE.md / rule files | Generic memory MCPs | **Knowit** |
+|---|---|---|---|
+| Survives across sessions | ✅ | ✅ | ✅ |
+| Structured (types, scopes, confidence) | ❌ free-form text | ❌ blob notes | ✅ rules, decisions, patterns, conventions |
+| Retrieved per task, not dumped into every prompt | ❌ always in context | ⚠️ varies | ✅ `resolve_context` returns only what matters |
+| Shared with teammates via git | ⚠️ merge-conflict sprawl | ❌ | ✅ line-delimited JSONL, clean diffs |
+| Works across every MCP agent | ❌ per-tool files | ⚠️ varies | ✅ 11+ clients, one memory |
+| Local-first, no hosted dependency | ✅ | ❌ often cloud | ✅ your repo, your data |
+| Browse/audit what agents remember | ❌ | ❌ | ✅ `npx knowit preview` |
 
 ## Contents
 
-- [Why Knowit](#why-knowit)
+- [Why Knowit (and not another memory tool)](#why-knowit-and-not-another-memory-tool)
 - [Why Structured Memory](#why-structured-memory)
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
+- [Memory Browser (`knowit preview`)](#memory-browser-knowit-preview)
 - [Common Use Cases](#common-use-cases)
 - [CLI](#cli)
 - [MCP Tools](#mcp-tools)
@@ -31,14 +53,6 @@ Instead of re-explaining architecture rules, naming conventions, and past decisi
 - [Public Launch Note](#public-launch-note)
 - [Contributing](#contributing)
 - [License](#license)
-
-## Why Knowit
-
-- Give every agent session the same project context before it starts changing code.
-- Store engineering knowledge in a structured, queryable memory layer instead of scattered prompts and notes.
-- Share conventions and decisions across teammates through git-friendly project JSONL or an optional shared SQLite database.
-- Work across MCP-compatible agents without tying memory to one tool.
-- Store structured knowledge: rules, architecture, patterns, decisions, conventions, and notes.
 
 ## Why Structured Memory
 
@@ -145,6 +159,26 @@ In practice, Knowit is a layer for execution context:
 - durable engineering memory stays in Knowit
 - external canonical docs can stay in tools like Notion, with Knowit routing agents to the right source when needed
 
+## Memory Browser (`knowit preview`)
+
+See exactly what your agents remember:
+
+```bash
+npx knowit preview
+```
+
+This opens a local, read-only web UI (default `127.0.0.1:4077`) for browsing your knowledge base:
+
+- filter by text, entry type, repo, domain, or tag
+- two-pane list + detail view with rendered body blocks (headings, code, callouts, links)
+- entry metadata: type, scope, confidence, last updated
+- automatic light/dark theme, full keyboard navigation
+- strictly read-only — nothing can be modified from the browser
+
+<!-- TODO: screenshot — docs/assets/preview-light.png / preview-dark.png -->
+
+Useful for auditing what agents have stored, reviewing team memory before committing `.knowit/knowledge.jsonl`, and demoing the knowledge base.
+
 ## Common Use Cases
 
 - Store coding rules that agents must follow.
@@ -171,6 +205,7 @@ knowit resolve "add webhook retry handling" --repo api-gateway --domain billing
 knowit list --repo api-gateway
 knowit show <entry-id>
 knowit stats
+knowit preview   # local web UI for browsing memory
 
 # Sources
 knowit source list
@@ -194,13 +229,15 @@ knowit migrate-storage --sqlite-path .knowit/knowit.db
 
 | Tool | Purpose |
 |---|---|
-| `resolve_context` | Retrieve relevant knowledge before planning a task |
+| `resolve_context` | Retrieve relevant knowledge before planning a task (returns titles/summaries — tiered retrieval phase 1) |
+| `get_knowledge` | Fetch full content for entries by ID after `resolve_context` or `search_knowledge` (tiered retrieval phase 2) |
 | `store_knowledge` | Store one knowledge entry |
 | `capture_session_learnings` | Batch-store session learnings with deduplication |
 | `search_knowledge` | Search across one or more sources |
 | `resolve_source_action` | Decide whether to use Knowit directly or route to another provider |
 | `connect_source` | Connect a known provider such as `local` or `notion` |
 | `list_sources` | List configured sources |
+| `register_mcp_source` | Register an external MCP server as a Knowit source with explicit tool mappings |
 
 ## Knowledge Model
 
