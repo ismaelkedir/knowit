@@ -1,0 +1,38 @@
+name: Bug report
+description: Something broke or behaved wrong
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Knowit version
+      description: Output of `npx knowit --version`
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Code, Cursor, Codex, ...
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. npx knowit install
+        2. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / logs
+      description: Set KNOWIT_LOG_LEVEL=debug if helpful. Remove anything sensitive.
+      render: shell
