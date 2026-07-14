@@ -12,3 +12,4 @@ knowit.db-shm
 knowit.db-wal
 *.tsbuildinfo
 .DS_Store
+marketing/
